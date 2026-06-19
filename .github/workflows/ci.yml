@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: signet_workforce_erp
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PORT: 5000
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: signet_workforce_erp
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: CI-SignetWorkforceERP-SuperSecretKey-2024!@#
+      JWT_ISSUER: SignetWorkforceERP
+      JWT_AUDIENCE: SignetWorkforceERPUsers
+      JWT_EXPIRY_HOURS: 8
+      CORS_ORIGINS: http://localhost:4200
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Type check
+        working-directory: backend
+        run: npm run lint
+
+      - name: Build
+        working-directory: backend
+        run: npm run build
+
+      - name: Run tests
+        working-directory: backend
+        run: npm test
+
+      - name: Run API smoke test
+        working-directory: backend
+        run: |
+          node dist/server.js &
+          APP_PID=$!
+          for i in {1..30}; do
+            if curl -sf http://localhost:5000/health > /dev/null; then
+              echo "Health check passed"
+              curl -sf http://localhost:5000/
+              PATH_COUNT=$(curl -sf http://localhost:5000/openapi.json | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(Object.keys(JSON.parse(d).paths||{}).length))")
+              echo "OpenAPI paths: $PATH_COUNT"
+              test "$PATH_COUNT" -ge 40
+              kill $APP_PID
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API failed to start"
+          kill $APP_PID || true
+          exit 1
