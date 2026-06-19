@@ -1,1 +1,10 @@
 node_modules/
+dist/
+logs/
+*.log
+.env
+uploads/*
+!uploads/.gitkeep
+backend/logs/
+.DS_Store
+**/.DS_Store
