@@ -1,0 +1,12 @@
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-jwt-secret-key-minimum-32-chars!';
+process.env.JWT_ISSUER = 'SignetWorkforceERP';
+process.env.JWT_AUDIENCE = 'SignetWorkforceERPUsers';
+process.env.DB_HOST = process.env.DB_HOST ?? 'localhost';
+process.env.DB_PORT = process.env.DB_PORT ?? '5432';
+process.env.DB_NAME = process.env.DB_NAME ?? 'signet_workforce_erp';
+process.env.DB_USER = process.env.DB_USER ?? 'postgres';
+process.env.DB_PASSWORD = process.env.DB_PASSWORD ?? 'postgres';
+process.env.UPLOAD_PATH = process.env.UPLOAD_PATH ?? '../uploads';
+process.env.PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5000/uploads';
+process.env.LOG_LEVEL = 'error';

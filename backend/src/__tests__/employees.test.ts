@@ -1,0 +1,141 @@
+import request from 'supertest';
+import { app, authHeader, loginAsAdmin } from './helpers/test-app';
+import { Gender, EmploymentType } from '../types/enums';
+
+describe('Employees API', () => {
+  let token: string;
+  let createdEmployeeId: string;
+
+  beforeAll(async () => {
+    token = await loginAsAdmin();
+  });
+
+  it('lists employees with pagination', async () => {
+    const res = await request(app)
+      .get('/api/employees?page=1&pageSize=10')
+      .set(authHeader(token));
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toBeInstanceOf(Array);
+    expect(res.body.page).toBe(1);
+    expect(res.body.pageSize).toBe(10);
+  });
+
+  it('creates an employee', async () => {
+    const payload = {
+      firstName: 'Test',
+      lastName: 'Employee',
+      email: `test.employee.${Date.now()}@signet-erp.com`,
+      phone: '9876543210',
+      dateOfBirth: '1995-06-15',
+      gender: Gender.Male,
+      joiningDate: '2024-01-01',
+      employmentType: EmploymentType.FullTime,
+      departmentId: 'dept-001',
+      designationId: 'des-002',
+      basicSalary: 15000,
+      grossSalary: 25000,
+    };
+
+    const res = await request(app)
+      .post('/api/employees')
+      .set(authHeader(token))
+      .send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBeDefined();
+    createdEmployeeId = res.body.id;
+  });
+
+  it('gets employee by id', async () => {
+    const res = await request(app)
+      .get(`/api/employees/${createdEmployeeId}`)
+      .set(authHeader(token));
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(createdEmployeeId);
+    expect(res.body.firstName).toBe('Test');
+    expect(res.body.departmentId).toBe('dept-001');
+  });
+
+  it('uploads employee profile photo', async () => {
+    const pngBuffer = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+
+    const res = await request(app)
+      .post(`/api/employees/${createdEmployeeId}/photo`)
+      .set(authHeader(token))
+      .attach('photo', pngBuffer, 'photo.png');
+
+    expect(res.status).toBe(200);
+    expect(res.body.url).toBeDefined();
+    expect(res.body.profilePhotoUrl).toBeDefined();
+
+    const detail = await request(app)
+      .get(`/api/employees/${createdEmployeeId}`)
+      .set(authHeader(token));
+
+    expect(detail.body.profilePhotoUrl).toBe(res.body.profilePhotoUrl);
+  });
+
+  it('uploads via documents endpoint for employee', async () => {
+    const pngBuffer = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+
+    const res = await request(app)
+      .post('/api/documents/upload')
+      .set(authHeader(token))
+      .field('entityType', 'employee')
+      .field('entityId', createdEmployeeId)
+      .field('documentType', '1')
+      .attach('photo', pngBuffer, 'avatar.png');
+
+    expect(res.status).toBe(200);
+    expect(res.body.profilePhotoUrl).toBeDefined();
+  });
+
+  it('updates an employee', async () => {
+    const res = await request(app)
+      .put(`/api/employees/${createdEmployeeId}`)
+      .set(authHeader(token))
+      .send({
+        id: createdEmployeeId,
+        firstName: 'Updated',
+        lastName: 'Employee',
+        phone: '9876543210',
+        dateOfBirth: '1995-06-15',
+        gender: Gender.Male,
+        status: 6,
+        employmentType: EmploymentType.FullTime,
+        departmentId: 'dept-002',
+        designationId: 'des-001',
+        basicSalary: 16000,
+        grossSalary: 26000,
+      });
+
+    expect(res.status).toBe(204);
+  });
+
+  it('soft deletes an employee', async () => {
+    const res = await request(app)
+      .delete(`/api/employees/${createdEmployeeId}`)
+      .set(authHeader(token));
+
+    expect(res.status).toBe(204);
+
+    const getRes = await request(app)
+      .get(`/api/employees/${createdEmployeeId}`)
+      .set(authHeader(token));
+
+    expect(getRes.status).toBe(404);
+  });
+
+  it('rejects unauthenticated access', async () => {
+    const res = await request(app).get('/api/employees');
+    expect(res.status).toBe(401);
+  });
+});

@@ -1,0 +1,2068 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Signet Workforce ERP API",
+    "version": "1.0.0",
+    "description": "Production REST API for Signet Workforce ERP. Authenticate via POST /api/auth/login, then use the Bearer token for protected routes."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000",
+      "description": "Local"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {}
+          },
+          "totalCount": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "MonthYearBody": {
+        "type": "object",
+        "required": [
+          "month",
+          "year"
+        ],
+        "properties": {
+          "month": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12,
+            "example": 6
+          },
+          "year": {
+            "type": "integer",
+            "minimum": 2000,
+            "maximum": 2100,
+            "example": 2026
+          }
+        }
+      },
+      "InvoiceLineItem": {
+        "type": "object",
+        "required": [
+          "description",
+          "quantity",
+          "unitRate"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "unitRate": {
+            "type": "number",
+            "minimum": 0
+          },
+          "hsnSacCode": {
+            "type": "string",
+            "example": "998519"
+          }
+        }
+      },
+      "FamilyMember": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date"
+          },
+          "aadhaarNumber": {
+            "type": "string"
+          }
+        }
+      },
+      "PfEsicUpsertBody": {
+        "type": "object",
+        "properties": {
+          "uanNumber": {
+            "type": "string"
+          },
+          "pfNumber": {
+            "type": "string"
+          },
+          "pfJoiningDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "pfExitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "pfNomineeName": {
+            "type": "string"
+          },
+          "pfNomineeRelation": {
+            "type": "string"
+          },
+          "pfAccountNumber": {
+            "type": "string"
+          },
+          "employerPfPercentage": {
+            "type": "number"
+          },
+          "employeePfPercentage": {
+            "type": "number"
+          },
+          "isPfApplicable": {
+            "type": "boolean"
+          },
+          "pfRemarks": {
+            "type": "string"
+          },
+          "esiNumber": {
+            "type": "string"
+          },
+          "esiDispensary": {
+            "type": "string"
+          },
+          "esiJoiningDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "esiExitDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "isEsiApplicable": {
+            "type": "boolean"
+          },
+          "employerEsiPercentage": {
+            "type": "number"
+          },
+          "employeeEsiPercentage": {
+            "type": "number"
+          },
+          "familyMembers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FamilyMember"
+            }
+          },
+          "esiRemarks": {
+            "type": "string"
+          },
+          "panNumber": {
+            "type": "string"
+          },
+          "aadhaarNumber": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login with email and password",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful"
+          }
+        }
+      }
+    },
+    "/api/auth/refresh-token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "summary": "Refresh access token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
+                "properties": {
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "New tokens issued"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Logout current session",
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          }
+        }
+      }
+    },
+    "/api/auth/change-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Change password for authenticated user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Password changed"
+          }
+        }
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "security": [],
+        "summary": "Request password reset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Reset email sent if account exists"
+          }
+        }
+      }
+    },
+    "/api/employees": {
+      "get": {
+        "tags": [
+          "Employees"
+        ],
+        "summary": "List employees (paginated)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "departmentId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "siteId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated employee list"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Employees"
+        ],
+        "summary": "Create employee",
+        "responses": {
+          "201": {
+            "description": "Employee created; returns id"
+          }
+        }
+      }
+    },
+    "/api/employees/{id}": {
+      "get": {
+        "tags": [
+          "Employees"
+        ],
+        "summary": "Get employee by ID",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Employee detail"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Employees"
+        ],
+        "summary": "Update employee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated employee"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Employees"
+        ],
+        "summary": "Soft-delete employee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/api/employees/{id}/photo": {
+      "post": {
+        "tags": [
+          "Employees"
+        ],
+        "summary": "Upload employee profile photo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "photo"
+                ],
+                "properties": {
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Photo URL updated"
+          }
+        }
+      }
+    },
+    "/api/departments": {
+      "get": {
+        "tags": [
+          "Departments"
+        ],
+        "summary": "List all departments",
+        "responses": {
+          "200": {
+            "description": "Department list"
+          }
+        }
+      }
+    },
+    "/api/designations": {
+      "get": {
+        "tags": [
+          "Designations"
+        ],
+        "summary": "List all designations",
+        "responses": {
+          "200": {
+            "description": "Designation list"
+          }
+        }
+      }
+    },
+    "/api/attendance": {
+      "get": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "List attendance records",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "employeeId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "siteId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated attendance records"
+          }
+        }
+      }
+    },
+    "/api/attendance/mark": {
+      "post": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "Mark attendance for an employee",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "employeeId",
+                  "attendanceDate",
+                  "status"
+                ],
+                "properties": {
+                  "employeeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "attendanceDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "status": {
+                    "type": "integer"
+                  },
+                  "siteId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "checkInTime": {
+                    "type": "string"
+                  },
+                  "checkOutTime": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Attendance marked; returns id"
+          }
+        }
+      }
+    },
+    "/api/leave": {
+      "get": {
+        "tags": [
+          "Leave"
+        ],
+        "summary": "List leave requests",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated leave requests"
+          }
+        }
+      }
+    },
+    "/api/leave/request": {
+      "post": {
+        "tags": [
+          "Leave"
+        ],
+        "summary": "Submit leave request",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "employeeId",
+                  "leaveType",
+                  "fromDate",
+                  "toDate",
+                  "reason"
+                ],
+                "properties": {
+                  "employeeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "leaveType": {
+                    "type": "integer"
+                  },
+                  "fromDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "toDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "isHalfDay": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Leave request created"
+          }
+        }
+      }
+    },
+    "/api/leave/{id}/approve": {
+      "put": {
+        "tags": [
+          "Leave"
+        ],
+        "summary": "Approve or reject leave request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "approve"
+                ],
+                "properties": {
+                  "approve": {
+                    "type": "boolean"
+                  },
+                  "comments": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Leave status updated"
+          }
+        }
+      }
+    },
+    "/api/payroll": {
+      "get": {
+        "tags": [
+          "Payroll"
+        ],
+        "summary": "List payroll runs",
+        "responses": {
+          "200": {
+            "description": "Payroll run history"
+          }
+        }
+      }
+    },
+    "/api/payroll/process": {
+      "post": {
+        "tags": [
+          "Payroll"
+        ],
+        "summary": "Process payroll for a month",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MonthYearBody"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "employeeIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payroll run id"
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips": {
+      "get": {
+        "tags": [
+          "Salary Slips"
+        ],
+        "summary": "List salary slips",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "employeeId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated salary slips"
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/generate": {
+      "post": {
+        "tags": [
+          "Salary Slips"
+        ],
+        "summary": "Generate salary slips from processed payroll",
+        "description": "Run after payroll processing for the same month/year.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonthYearBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generation summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generated": {
+                      "type": "integer"
+                    },
+                    "month": {
+                      "type": "integer"
+                    },
+                    "year": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}": {
+      "get": {
+        "tags": [
+          "Salary Slips"
+        ],
+        "summary": "Get salary slip detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Salary slip detail"
+          }
+        }
+      }
+    },
+    "/api/payroll/payslips/{id}/print": {
+      "get": {
+        "tags": [
+          "Salary Slips"
+        ],
+        "summary": "Get print-ready salary slip payload",
+        "description": "Returns company, employee, earnings, deductions, and attendance for PDF/print UI.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Print-ready salary slip data"
+          }
+        }
+      }
+    },
+    "/api/statutory/pf-esic": {
+      "get": {
+        "tags": [
+          "Statutory"
+        ],
+        "summary": "List PF/ESIC details for all employees",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "siteId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pfApplicable",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "esiApplicable",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated PF/ESIC records"
+          }
+        }
+      }
+    },
+    "/api/statutory/pf-esic/bulk": {
+      "post": {
+        "tags": [
+          "Statutory"
+        ],
+        "summary": "Bulk upsert PF/ESIC details",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "items"
+                ],
+                "properties": {
+                  "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "allOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "employeeId"
+                          ],
+                          "properties": {
+                            "employeeId": {
+                              "type": "string",
+                              "format": "uuid"
+                            }
+                          }
+                        },
+                        {
+                          "$ref": "#/components/schemas/PfEsicUpsertBody"
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bulk update result with updated count"
+          }
+        }
+      }
+    },
+    "/api/statutory/pf-esic/{employeeId}": {
+      "get": {
+        "tags": [
+          "Statutory"
+        ],
+        "summary": "Get PF/ESIC details for one employee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "employeeId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PF/ESIC detail"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Statutory"
+        ],
+        "summary": "Create or update PF/ESIC details for an employee",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "employeeId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PfEsicUpsertBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated PF/ESIC detail"
+          }
+        }
+      }
+    },
+    "/api/billing/invoices": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "List invoices",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clientId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated invoices"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Create manual invoice",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "clientId",
+                  "invoiceDate",
+                  "dueDate",
+                  "month",
+                  "year",
+                  "gstRate",
+                  "lineItems"
+                ],
+                "properties": {
+                  "clientId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "siteId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "invoiceDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "month": {
+                    "type": "integer"
+                  },
+                  "year": {
+                    "type": "integer"
+                  },
+                  "gstRate": {
+                    "type": "number"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "termsAndConditions": {
+                    "type": "string"
+                  },
+                  "lineItems": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/InvoiceLineItem"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invoice id"
+          }
+        }
+      }
+    },
+    "/api/billing/invoices/generate-by-sites": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Auto-generate invoices for active sites",
+        "description": "Creates one invoice per site using headcount and site billing rates. Skips sites that already have an invoice for the period.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/MonthYearBody"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "siteIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "format": "uuid"
+                        }
+                      },
+                      "gstRate": {
+                        "type": "number",
+                        "default": 18
+                      },
+                      "dueDateDays": {
+                        "type": "integer",
+                        "default": 30
+                      },
+                      "notes": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generation summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generated": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    },
+                    "invoices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "siteId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "siteName": {
+                            "type": "string"
+                          },
+                          "invoiceId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "invoiceNumber": {
+                            "type": "string"
+                          },
+                          "totalAmount": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/billing/invoices/by-site/{siteId}": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "List invoices for a site",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated site invoices with line items"
+          }
+        }
+      }
+    },
+    "/api/billing/invoices/site/{siteId}": {
+      "post": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Create manual invoice for a specific site",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "siteId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "invoiceDate",
+                  "dueDate",
+                  "month",
+                  "year",
+                  "gstRate",
+                  "lineItems"
+                ],
+                "properties": {
+                  "invoiceDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "month": {
+                    "type": "integer"
+                  },
+                  "year": {
+                    "type": "integer"
+                  },
+                  "gstRate": {
+                    "type": "number"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "termsAndConditions": {
+                    "type": "string"
+                  },
+                  "lineItems": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/InvoiceLineItem"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created site invoice"
+          }
+        }
+      }
+    },
+    "/api/billing/invoices/{id}": {
+      "get": {
+        "tags": [
+          "Billing"
+        ],
+        "summary": "Get invoice detail for print/view",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invoice with line items and client/site details"
+          }
+        }
+      }
+    },
+    "/api/dashboard/stats": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Dashboard KPI statistics",
+        "responses": {
+          "200": {
+            "description": "Dashboard stats"
+          }
+        }
+      }
+    },
+    "/api/clients": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "List clients",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated clients"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Create client",
+        "responses": {
+          "201": {
+            "description": "Client id"
+          }
+        }
+      }
+    },
+    "/api/clients/{id}": {
+      "put": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Update client",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated client"
+          }
+        }
+      }
+    },
+    "/api/sites": {
+      "get": {
+        "tags": [
+          "Sites"
+        ],
+        "summary": "List sites",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clientId",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Site list"
+          }
+        }
+      }
+    },
+    "/api/documents/upload": {
+      "post": {
+        "tags": [
+          "Documents"
+        ],
+        "summary": "Upload a document",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "entityType": {
+                    "type": "string",
+                    "example": "employee"
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "documentType": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Document uploaded"
+          }
+        }
+      }
+    },
+    "/api/shifts": {
+      "get": {
+        "tags": [
+          "Shifts"
+        ],
+        "summary": "List shifts",
+        "responses": {
+          "200": {
+            "description": "Shift list"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Shifts"
+        ],
+        "summary": "Create shift",
+        "responses": {
+          "201": {
+            "description": "Shift id"
+          }
+        }
+      }
+    },
+    "/api/shifts/{id}": {
+      "put": {
+        "tags": [
+          "Shifts"
+        ],
+        "summary": "Update shift",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated shift"
+          }
+        }
+      }
+    },
+    "/api/holidays": {
+      "get": {
+        "tags": [
+          "Holidays"
+        ],
+        "summary": "List holidays",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Holiday list"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Holidays"
+        ],
+        "summary": "Create holiday",
+        "responses": {
+          "201": {
+            "description": "Holiday id"
+          }
+        }
+      }
+    },
+    "/api/holidays/{id}": {
+      "put": {
+        "tags": [
+          "Holidays"
+        ],
+        "summary": "Update holiday",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated holiday"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Holidays"
+        ],
+        "summary": "Delete holiday",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          }
+        }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "List notifications for current user",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unreadOnly",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated notifications"
+          }
+        }
+      }
+    },
+    "/api/notifications/read-all": {
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark all notifications as read",
+        "responses": {
+          "204": {
+            "description": "All marked read"
+          }
+        }
+      }
+    },
+    "/api/notifications/{id}/read": {
+      "put": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark one notification as read",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Marked read"
+          }
+        }
+      }
+    },
+    "/api/reports/attendance": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Attendance summary report",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "toDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attendance report"
+          }
+        }
+      }
+    },
+    "/api/reports/payroll": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Payroll summary report",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Payroll report"
+          }
+        }
+      }
+    },
+    "/api/reports/billing": {
+      "get": {
+        "tags": [
+          "Reports"
+        ],
+        "summary": "Billing summary report",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Billing report"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Authentication and session management"
+    },
+    {
+      "name": "Employees",
+      "description": "Employee master data"
+    },
+    {
+      "name": "Departments",
+      "description": "Department lookup"
+    },
+    {
+      "name": "Designations",
+      "description": "Designation lookup"
+    },
+    {
+      "name": "Attendance",
+      "description": "Attendance tracking"
+    },
+    {
+      "name": "Leave",
+      "description": "Leave requests and approvals"
+    },
+    {
+      "name": "Payroll",
+      "description": "Payroll processing"
+    },
+    {
+      "name": "Salary Slips",
+      "description": "Salary slip generation and print"
+    },
+    {
+      "name": "Statutory",
+      "description": "PF and ESIC statutory details"
+    },
+    {
+      "name": "Billing",
+      "description": "Client and site invoicing"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Dashboard statistics"
+    },
+    {
+      "name": "Clients",
+      "description": "Client management"
+    },
+    {
+      "name": "Sites",
+      "description": "Site management"
+    },
+    {
+      "name": "Documents",
+      "description": "Document upload"
+    },
+    {
+      "name": "Shifts",
+      "description": "Shift management"
+    },
+    {
+      "name": "Holidays",
+      "description": "Holiday calendar"
+    },
+    {
+      "name": "Notifications",
+      "description": "User notifications"
+    },
+    {
+      "name": "Reports",
+      "description": "Business reports"
+    }
+  ]
+}
