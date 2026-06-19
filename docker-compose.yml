@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: signet-postgres
+    environment:
+      POSTGRES_DB: signet_workforce_erp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - signet-network
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: signet-api
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: signet_workforce_erp
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: "SignetWorkforceERP-SuperSecretKey-ChangeInProduction-2024!@#"
+      JWT_ISSUER: SignetWorkforceERP
+      JWT_AUDIENCE: SignetWorkforceERPUsers
+      JWT_EXPIRY_HOURS: "8"
+      CORS_ORIGINS: "http://localhost:4200"
+      UPLOAD_PATH: /app/uploads
+      PUBLIC_BASE_URL: "http://localhost:5000/uploads"
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks:
+      - signet-network
+    restart: unless-stopped
+
+  frontend:
+    profiles:
+      - full
+    build:
+      context: ../signet-workforce-erp-frontend
+      dockerfile: Dockerfile
+    container_name: signet-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - signet-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  signet-network:
+    driver: bridge

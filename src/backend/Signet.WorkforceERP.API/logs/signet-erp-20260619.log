@@ -1,0 +1,19 @@
+2026-06-19 00:00:22.204 +05:30 [INF] Handling GetEmployeesQuery: {"Page":1,"PageSize":20,"Search":null,"DepartmentId":null,"DesignationId":null,"SiteId":null,"Status":null,"EmploymentType":null,"SortBy":"CreatedAt","SortDir":"desc","$type":"GetEmployeesQuery"}
+2026-06-19 00:00:22.233 +05:30 [INF] Handled GetEmployeesQuery
+2026-06-19 00:00:22.235 +05:30 [INF] HTTP GET /api/employees responded 200 in 43.1873 ms
+2026-06-19 00:00:30.732 +05:30 [INF] Handling GetInvoicesQuery: {"Page":1,"PageSize":20,"ClientId":null,"Status":null,"Month":null,"Year":null,"Search":null,"$type":"GetInvoicesQuery"}
+2026-06-19 00:00:30.789 +05:30 [INF] Handled GetInvoicesQuery
+2026-06-19 00:00:30.800 +05:30 [INF] HTTP GET /api/billing/invoices responded 200 in 85.5372 ms
+2026-06-19 00:00:42.660 +05:30 [INF] Handling GetDashboardStatsQuery: {"$type":"GetDashboardStatsQuery"}
+2026-06-19 00:00:42.682 +05:30 [INF] Handled GetDashboardStatsQuery
+2026-06-19 00:00:42.684 +05:30 [INF] HTTP GET /api/dashboard/stats responded 200 in 24.6700 ms
+2026-06-19 00:13:28.905 +05:30 [INF] HTTP GET /api-docs responded 404 in 0.8476 ms
+2026-06-19 00:13:34.242 +05:30 [INF] HTTP GET /api-docs responded 404 in 0.2445 ms
+2026-06-19 00:18:36.525 +05:30 [INF] HTTP GET /openapi.json responded 404 in 0.6133 ms
+2026-06-19 00:19:38.853 +05:30 [INF] HTTP GET / responded 200 in 5.8628 ms
+2026-06-19 00:28:53.762 +05:30 [INF] HTTP GET /health responded 200 in 5054.6566 ms
+2026-06-19 00:28:53.779 +05:30 [INF] Handling LoginCommand: {"Email":"admin@signet-erp.com","Password":"Admin@123","$type":"LoginCommand"}
+2026-06-19 00:28:59.112 +05:30 [INF] Handled LoginCommand
+2026-06-19 00:28:59.114 +05:30 [INF] HTTP POST /api/auth/login responded 200 in 5336.7835 ms
+2026-06-19 00:29:23.651 +05:30 [INF] HTTP GET /openapi.json responded 404 in 0.2552 ms
+2026-06-19 00:30:29.923 +05:30 [INF] HTTP GET / responded 200 in 2.4314 ms
