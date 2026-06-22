@@ -16,6 +16,7 @@ import { uploadRoot } from './modules/documents/upload.config';
 import authRoutes from './modules/auth/auth.routes';
 import employeeRoutes from './modules/employee/employee.routes';
 import departmentRoutes from './modules/department/department.routes';
+import designationGradeRoutes from './modules/designation-grade/designation-grade.routes';
 import designationRoutes from './modules/designation/designation.routes';
 import attendanceRoutes from './modules/attendance/attendance.routes';
 import leaveRoutes from './modules/leave/leave.routes';
@@ -30,6 +31,7 @@ import holidayRoutes from './modules/holiday/holiday.routes';
 import notificationRoutes from './modules/notification/notification.routes';
 import reportsRoutes from './modules/reports/reports.routes';
 import statutoryRoutes from './modules/statutory/statutory.routes';
+import companyRoutes from './modules/company/company.routes';
 
 export function createApp(): express.Application {
   const app = express();
@@ -92,6 +94,7 @@ export function createApp(): express.Application {
   app.use('/api/employees', employeeRoutes);
   app.use('/api/departments', departmentRoutes);
   app.use('/api/designations', designationRoutes);
+  app.use('/api/designation-grades', designationGradeRoutes);
   app.use('/api/attendance', attendanceRoutes);
   app.use('/api/leave', leaveRoutes);
   app.use('/api/payroll', payrollRoutes);
@@ -105,6 +108,7 @@ export function createApp(): express.Application {
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/reports', reportsRoutes);
   app.use('/api/statutory', statutoryRoutes);
+  app.use('/api/company', companyRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
