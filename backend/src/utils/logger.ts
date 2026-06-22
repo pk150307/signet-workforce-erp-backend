@@ -8,6 +8,10 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
+const consoleFormat = config.isProduction
+  ? winston.format.combine(winston.format.timestamp(), winston.format.simple())
+  : winston.format.combine(winston.format.colorize(), winston.format.timestamp(), winston.format.simple());
+
 export const logger = winston.createLogger({
   level: config.logLevel,
   format: winston.format.combine(
@@ -17,18 +21,11 @@ export const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'signet-workforce-erp' },
   transports: [
+    new winston.transports.Console({ format: consoleFormat }),
     new winston.transports.File({ filename: path.join(logsDir, 'error.log'), level: 'error' }),
     new winston.transports.File({ filename: path.join(logsDir, 'combined.log') }),
   ],
 });
-
-if (!config.isProduction) {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
-    }),
-  );
-}
 
 export function logUncaughtExceptions(): void {
   process.on('uncaughtException', (error) => {
@@ -37,8 +34,9 @@ export function logUncaughtExceptions(): void {
   });
 
   process.on('unhandledRejection', (reason) => {
-    logger.error('Unhandled rejection', {
-      reason: reason instanceof Error ? reason.message : String(reason),
-    });
+    const message = reason instanceof Error ? reason.message : String(reason);
+    console.error('[startup] Unhandled rejection:', message);
+    logger.error('Unhandled rejection', { reason: message });
+    process.exit(1);
   });
 }

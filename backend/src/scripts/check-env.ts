@@ -11,7 +11,7 @@ async function isPortFree(port: number): Promise<boolean> {
     server.once('listening', () => {
       server.close(() => resolve(true));
     });
-    server.listen(port, '127.0.0.1');
+    server.listen(port, 'signet-workforce-db.cnkkq6k8a3gr.ap-south-1.rds.amazonaws.com');
   });
 }
 
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     console.error(`   Database: ${config.db.name}`);
     console.error('   Tips:');
     console.error('   - Start Postgres (docker compose up postgres -d)');
-    console.error('   - Use DB_HOST=127.0.0.1 in .env (not localhost on macOS)');
+    console.error('   - Use DB_HOST=signet-workforce-db.cnkkq6k8a3gr.ap-south-1.rds.amazonaws.com in .env (not localhost on macOS)');
     console.error('   - Verify credentials in .env match your Postgres setup\n');
     process.exit(1);
   }

@@ -29,6 +29,7 @@ export const config = {
     name: process.env.DB_NAME ?? 'signet_workforce_erp',
     user: process.env.DB_USER ?? 'postgres',
     password: process.env.DB_PASSWORD ?? 'postgres',
+    ssl: process.env.DB_SSL === 'true',
   },
   jwt: {
     secret: required('JWT_SECRET', 'SignetWorkforceERP-SuperSecretKey-ChangeInProduction-2024!@#'),
