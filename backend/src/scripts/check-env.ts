@@ -1,6 +1,6 @@
 import net from 'net';
 import { config } from '../config';
-import { checkDatabaseConnection } from '../database/pool';
+import { connectDB } from '../database';
 
 const MIN_NODE = 20;
 
@@ -29,8 +29,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const dbOk = await checkDatabaseConnection();
-  if (!dbOk) {
+  try {
+    await connectDB();
+  } catch {
     console.error('\n❌ Cannot connect to PostgreSQL.');
     console.error(`   Host: ${config.db.host}:${config.db.port}`);
     console.error(`   Database: ${config.db.name}`);

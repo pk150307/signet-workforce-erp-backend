@@ -1,30 +1,36 @@
 import { createApp } from './app';
 import { config } from './config';
+import { connectDB, pool } from './database';
 import { runMigrations } from './database/migrate';
 import { seedDatabase } from './database/seed';
-import { pool } from './database/pool';
 import { logger, logUncaughtExceptions } from './utils/logger';
 
 async function bootstrap(): Promise<void> {
-  logUncaughtExceptions();
+  try {
+    logUncaughtExceptions();
 
-  logger.info('Starting Signet Workforce ERP API');
+    logger.info('Starting Signet Workforce ERP API');
 
-  await runMigrations();
-  await seedDatabase();
+    await connectDB();
+    await runMigrations();
+    await seedDatabase();
 
-  const app = createApp();
+    const app = createApp();
 
-  app.listen(config.port, () => {
-    logger.info(`Server listening on port ${config.port}`, {
-      env: config.nodeEnv,
-      docs: config.isProduction ? undefined : `http://localhost:${config.port}/swagger`,
+    app.listen(config.port, () => {
+      logger.info(`Server listening on port ${config.port}`, {
+        env: config.nodeEnv,
+        docs: config.isProduction ? undefined : `http://localhost:${config.port}/swagger`,
+      });
     });
-  });
+  } catch (error) {
+    logger.error('Startup failed', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    await pool.end();
+    process.exit(1);
+  }
 }
 
-bootstrap().catch(async (error) => {
-  logger.error('Failed to start server', { error: error instanceof Error ? error.message : String(error) });
-  await pool.end();
-  process.exit(1);
-});
+bootstrap();

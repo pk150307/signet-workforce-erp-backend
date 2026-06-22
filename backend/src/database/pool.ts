@@ -47,6 +47,30 @@ export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>)
   }
 }
 
+export async function connectDB(): Promise<void> {
+  const { host, port, name, user } = config.db;
+
+  try {
+    logger.info('Connecting to database...', { host, port, database: name, user });
+    const client = await pool.connect();
+    try {
+      await client.query('SELECT 1');
+    } finally {
+      client.release();
+    }
+    logger.info('Database connected successfully');
+  } catch (error) {
+    logger.error('Database connection failed', {
+      error: error instanceof Error ? error.message : String(error),
+      host,
+      port,
+      database: name,
+      user,
+    });
+    throw error;
+  }
+}
+
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
     await pool.query('SELECT 1');
