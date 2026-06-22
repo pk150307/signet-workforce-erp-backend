@@ -7,9 +7,14 @@ describe('Employees API', () => {
   let token: string;
   let createdEmployeeId: string;
   let draftEmployeeId: string;
+  let demoClientId: string;
 
   beforeAll(async () => {
     token = await loginAsAdmin();
+    const clientsRes = await request(app)
+      .get('/api/clients?page=1&pageSize=1')
+      .set(authHeader(token));
+    demoClientId = clientsRes.body.items[0]?.id as string;
   });
 
   it('lists employees with pagination', async () => {
@@ -61,6 +66,7 @@ describe('Employees API', () => {
         dateOfBirth: '',
         joiningDate: '2024-01-01',
         employmentType: EmploymentType.FullTime,
+        clientId: demoClientId,
         departmentId: 'dept-001',
         designationId: 'des-002',
         draftStep: 1,
@@ -84,6 +90,7 @@ describe('Employees API', () => {
         gender: Gender.Male,
         joiningDate: '2024-01-01',
         employmentType: EmploymentType.FullTime,
+        clientId: demoClientId,
         departmentId: 'dept-001',
         designationId: 'des-002',
         basicSalary: 15000,
@@ -111,6 +118,7 @@ describe('Employees API', () => {
       gender: Gender.Male,
       joiningDate: '2024-01-01',
       employmentType: EmploymentType.FullTime,
+      clientId: demoClientId,
       departmentId: 'dept-001',
       designationId: 'des-002',
       basicSalary: 15000,
@@ -136,7 +144,10 @@ describe('Employees API', () => {
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(createdEmployeeId);
     expect(res.body.firstName).toBe('Test');
-    expect(res.body.departmentId).toBe('dept-001');
+    expect(res.body.departmentCode).toBe('dept-001');
+    expect(res.body.departmentId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
     expect(res.body.status).toBe(EmployeeLifecycleStatus.Active);
   });
 
@@ -193,6 +204,7 @@ describe('Employees API', () => {
         gender: Gender.Male,
         status: EmployeeLifecycleStatus.Active,
         employmentType: EmploymentType.FullTime,
+        clientId: demoClientId,
         departmentId: 'dept-002',
         designationId: 'des-001',
         basicSalary: 16000,
@@ -226,6 +238,7 @@ describe('Employees API', () => {
       .set(authHeader(token))
       .send({
         joiningDate: '2026-01-15T00:00:00.000Z',
+        clientId: demoClientId,
         departmentId: 'dept-001',
         designationId: 'des-002',
         reuseEmployeeCode: true,
