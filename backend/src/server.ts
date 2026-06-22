@@ -8,26 +8,86 @@ import { logger, logUncaughtExceptions } from './utils/logger';
 async function bootstrap(): Promise<void> {
   logUncaughtExceptions();
 
-  console.log('[startup] Signet Workforce ERP API bootstrapping...');
+  console.log('[startup] 🚀 Bootstrapping Signet Workforce ERP API...');
   logger.info('Starting Signet Workforce ERP API');
 
-  await connectDB();
-  await runMigrations();
-  await seedDatabase();
+  try {
+    // ---------------------------
+    // 1. DB CONNECTION
+    // ---------------------------
+    console.log('[startup] 🔌 Connecting to database...');
+    await connectDB();
+    console.log('[startup] ✅ Database connected');
 
-  const app = createApp();
+    // ---------------------------
+    // 2. MIGRATIONS (with safety timeout)
+    // ---------------------------
+    console.log('[startup] ⚙️ Running migrations...');
+    await Promise.race([
+      runMigrations(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Migrations timeout (60s)')), 60000)
+      ),
+    ]);
+    console.log('[startup] ✅ Migrations completed');
 
-  await new Promise<void>((resolve, reject) => {
-    const server = app.listen(config.port, '0.0.0.0', () => {
-      console.log(`[startup] Server listening on 0.0.0.0:${config.port}`);
-      logger.info(`Server listening on port ${config.port}`, {
-        env: config.nodeEnv,
-        docs: config.isProduction ? undefined : `http://localhost:${config.port}/swagger`,
+    // ---------------------------
+    // 3. SEEDING (with safety timeout)
+    // ---------------------------
+    console.log('[startup] 🌱 Seeding database...');
+    await Promise.race([
+      seedDatabase(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Seeding timeout (60s)')), 60000)
+      ),
+    ]);
+    console.log('[startup] ✅ Seeding completed');
+
+    // ---------------------------
+    // 4. CREATE APP
+    // ---------------------------
+    console.log('[startup] 🧩 Creating app...');
+    const app = createApp();
+
+    // ---------------------------
+    // 5. START SERVER
+    // ---------------------------
+    await new Promise<void>((resolve, reject) => {
+      const server = app.listen(config.port, '0.0.0.0', () => {
+        console.log(`[startup] 🌐 Server listening on 0.0.0.0:${config.port}`);
+
+        logger.info('Server started successfully', {
+          port: config.port,
+          env: config.nodeEnv,
+          docs: config.isProduction
+            ? undefined
+            : `http://localhost:${config.port}/swagger`,
+        });
+
+        resolve();
       });
-      resolve();
+
+      server.on('error', (err) => {
+        console.error('[startup] ❌ Server failed to start:', err);
+        reject(err);
+      });
     });
-    server.on('error', reject);
-  });
+
+  } catch (error) {
+    console.error('[startup] ❌ Bootstrap failed:', error);
+
+    logger.error('Failed to start server', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    try {
+      await pool.end();
+    } catch (e) {
+      console.error('[startup] ⚠️ Failed to close DB pool:', e);
+    }
+
+    process.exit(1);
+  }
 }
 
 bootstrap().catch(async (error) => {
