@@ -12,11 +12,24 @@ export function formatInterval(value: string | null | undefined): string | null 
 }
 
 export function formatDate(value: Date | string | null | undefined): string | null {
-  if (!value) return null;
+  if (value == null || value === '') return null;
+
   if (value instanceof Date) {
-    return value.toISOString().split('T')[0];
+    return isNaN(value.getTime()) ? null : value.toISOString().split('T')[0];
   }
-  return String(value).split('T')[0];
+
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+
+  return null;
 }
 
 export function formatDateTime(value: Date | string | null | undefined): string | null {
@@ -37,6 +50,11 @@ export function countWorkingDays(year: number, month: number): number {
   return count;
 }
 
+/** Total calendar days in a month (used for paysroll pro-rating and payslip working days). */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
 export function monthName(month: number, year: number): string {
   return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
 }
@@ -48,4 +66,9 @@ export function toNumber(value: string | number | null | undefined): number {
 
 export function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/** Round to nearest whole rupee (22.56 → 23, 22.40 → 22). */
+export function roundOff(value: number): number {
+  return Math.round(value);
 }
