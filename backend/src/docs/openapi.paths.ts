@@ -105,6 +105,42 @@
  *         esiRemarks: { type: string }
  *         panNumber: { type: string }
  *         aadhaarNumber: { type: string }
+ *     CreateClientBody:
+ *       type: object
+ *       required: [companyName, contactPerson, email, phone, address, city, state]
+ *       properties:
+ *         companyName: { type: string, example: "Brigade Enterprises Ltd." }
+ *         contactPerson: { type: string, example: "Rajesh Kumar" }
+ *         email: { type: string, format: email, example: "rajesh@brigade.com" }
+ *         phone: { type: string, example: "9876543210" }
+ *         alternatePhone: { type: string, nullable: true }
+ *         website: { type: string, nullable: true }
+ *         address: { type: string, example: "135 Brigade Road" }
+ *         city: { type: string, example: "Bengaluru" }
+ *         state: { type: string, example: "Karnataka" }
+ *         pinCode: { type: string, example: "560025" }
+ *         gstNumber: { type: string, nullable: true }
+ *         panNumber: { type: string, nullable: true }
+ *         notes: { type: string, nullable: true }
+ *         isActive: { type: boolean, default: true }
+ *     CreateSiteBody:
+ *       type: object
+ *       required: [clientId, siteName, address, city, state]
+ *       properties:
+ *         clientId: { type: string, format: uuid }
+ *         siteName: { type: string, example: "Brigade Tech Park" }
+ *         description: { type: string, nullable: true }
+ *         address: { type: string, example: "135 Brigade Road" }
+ *         city: { type: string, example: "Bengaluru" }
+ *         state: { type: string, example: "Karnataka" }
+ *         pinCode: { type: string, example: "560025" }
+ *         contactPerson: { type: string, nullable: true }
+ *         contactPhone: { type: string, nullable: true }
+ *         contactEmail: { type: string, format: email, nullable: true }
+ *         requiredHeadcount: { type: integer, minimum: 0, example: 45 }
+ *         billingRatePerDay: { type: number, nullable: true }
+ *         billingRatePerMonth: { type: number, nullable: true }
+ *         isActive: { type: boolean, default: true }
  */
 
 /**
@@ -176,10 +212,103 @@
 
 /**
  * @openapi
+ * /api/employees/dashboard:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Employee dashboard KPIs and charts data
+ *     responses:
+ *       200: { description: Dashboard stats }
+ */
+/**
+ * @openapi
+ * /api/employees/recent:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Recently added employees
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 5, maximum: 50 }
+ *     responses:
+ *       200: { description: Recent employee list }
+ */
+/**
+ * @openapi
+ * /api/employees/activities:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Recent employee activity feed
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10, maximum: 100 }
+ *     responses:
+ *       200: { description: Activity list }
+ */
+/**
+ * @openapi
+ * /api/employees/generate-code:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Generate next employee code
+ *     responses:
+ *       200:
+ *         description: Generated code
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 code: { type: string, example: "SS-00001" }
+ */
+/**
+ * @openapi
+ * /api/employees/export:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Export employees as CSV
+ *     responses:
+ *       200:
+ *         description: CSV file
+ *         content:
+ *           text/csv: {}
+ */
+/**
+ * @openapi
+ * /api/employees/bulk/import:
+ *   post:
+ *     tags: [Employees]
+ *     summary: Bulk import employees from JSON rows
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rows]
+ *             properties:
+ *               rows:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200: { description: Import summary with imported/skipped/errors }
+ */
+/**
+ * @openapi
+ * /api/employees/draft:
+ *   post:
+ *     tags: [Employees]
+ *     summary: Create employee draft (multi-step wizard)
+ *     responses:
+ *       201: { description: Returns id and employeeCode }
+ */
+/**
+ * @openapi
  * /api/employees:
  *   get:
  *     tags: [Employees]
- *     summary: List employees (paginated)
+ *     summary: List employees (paginated, searchable)
  *     parameters:
  *       - in: query
  *         name: page
@@ -192,20 +321,228 @@
  *         schema: { type: string }
  *       - in: query
  *         name: departmentId
- *         schema: { type: string, format: uuid }
+ *         schema: { type: string }
+ *       - in: query
+ *         name: designationId
+ *         schema: { type: string }
  *       - in: query
  *         name: siteId
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: status
+ *         schema: { type: integer, description: "0=Draft, 1=Active, 2=Left, 3=Rejoined" }
+ *       - in: query
+ *         name: employmentType
  *         schema: { type: integer }
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string, enum: [name, code, joiningdate, createdat] }
+ *       - in: query
+ *         name: sortDir
+ *         schema: { type: string, enum: [asc, desc] }
  *     responses:
  *       200: { description: Paginated employee list }
  *   post:
  *     tags: [Employees]
- *     summary: Create employee
+ *     summary: Create active employee
  *     responses:
- *       201: { description: Employee created; returns id }
+ *       201: { description: Returns id and employeeCode }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/draft:
+ *   put:
+ *     tags: [Employees]
+ *     summary: Update employee draft
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Updated draft id and employeeCode }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/submit:
+ *   post:
+ *     tags: [Employees]
+ *     summary: Submit draft and activate employee
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Submit result with status Active }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/profile:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Full employee profile with attendance, payroll, leave summaries
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Complete profile object }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/timeline:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Chronological employee timeline
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Timeline events }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/history:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Employee audit history
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: History events }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/documents:
+ *   get:
+ *     tags: [Employees]
+ *     summary: List employee documents
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Document list }
+ *   post:
+ *     tags: [Employees]
+ *     summary: Upload employee document
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [file, type]
+ *             properties:
+ *               file: { type: string, format: binary }
+ *               type: { type: string, example: aadhaar }
+ *               label: { type: string }
+ *     responses:
+ *       201: { description: Uploaded document metadata }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/documents/{documentId}:
+ *   delete:
+ *     tags: [Employees]
+ *     summary: Soft-delete employee document
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       204: { description: Deleted }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/documents/{documentId}/download:
+ *   get:
+ *     tags: [Employees]
+ *     summary: Download employee document file
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: path
+ *         name: documentId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: File stream }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/mark-left:
+ *   post:
+ *     tags: [Employees]
+ *     summary: Mark employee as left (does not delete records)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [lastWorkingDate, reason]
+ *             properties:
+ *               lastWorkingDate: { type: string, format: date }
+ *               reason: { type: string }
+ *               remarks: { type: string }
+ *     responses:
+ *       204: { description: Marked left }
+ */
+/**
+ * @openapi
+ * /api/employees/{id}/rejoin:
+ *   post:
+ *     tags: [Employees]
+ *     summary: Rejoin a former employee
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [joiningDate, departmentId, designationId]
+ *             properties:
+ *               joiningDate: { type: string, format: date }
+ *               departmentId: { type: string }
+ *               designationId: { type: string }
+ *               siteId: { type: string, format: uuid }
+ *               reportingManagerId: { type: string, format: uuid }
+ *               reuseEmployeeCode: { type: boolean, default: true }
+ *               basicSalary: { type: number }
+ *               grossSalary: { type: number }
+ *     responses:
+ *       204: { description: Rejoined }
  */
 /**
  * @openapi
@@ -229,7 +566,7 @@
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: Updated employee }
+ *       204: { description: Updated }
  *   delete:
  *     tags: [Employees]
  *     summary: Soft-delete employee
@@ -239,7 +576,7 @@
  *         required: true
  *         schema: { type: string, format: uuid }
  *     responses:
- *       204: { description: Deleted }
+ *       204: { description: Archived }
  */
 /**
  * @openapi
@@ -288,57 +625,306 @@
 
 /**
  * @openapi
- * /api/attendance:
+ * /api/attendance/registers/employees:
  *   get:
  *     tags: [Attendance]
- *     summary: List attendance records
+ *     summary: Client-wise employee attendance list for a month
  *     parameters:
  *       - in: query
- *         name: page
- *         schema: { type: integer }
- *       - in: query
- *         name: pageSize
- *         schema: { type: integer }
- *       - in: query
- *         name: employeeId
+ *         name: clientId
+ *         required: true
  *         schema: { type: string, format: uuid }
  *       - in: query
- *         name: siteId
- *         schema: { type: string, format: uuid }
+ *         name: month
+ *         required: true
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
  *       - in: query
- *         name: fromDate
- *         schema: { type: string, format: date }
- *       - in: query
- *         name: toDate
- *         schema: { type: string, format: date }
- *       - in: query
- *         name: status
+ *         name: year
+ *         required: true
  *         schema: { type: integer }
  *     responses:
- *       200: { description: Paginated attendance records }
+ *       200: { description: Register metadata and per-employee P/A/L counts }
  */
 /**
  * @openapi
- * /api/attendance/mark:
- *   post:
+ * /api/attendance/registers/grid:
+ *   get:
  *     tags: [Attendance]
- *     summary: Mark attendance for an employee
+ *     summary: Spreadsheet register grid (employees × dates)
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Register grid with cell statuses }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/cells:
+ *   put:
+ *     tags: [Attendance]
+ *     summary: Batch update register cells
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [employeeId, attendanceDate, status]
+ *             required: [clientId, month, year, updates]
  *             properties:
- *               employeeId: { type: string, format: uuid }
- *               attendanceDate: { type: string, format: date }
- *               status: { type: integer }
- *               siteId: { type: string, format: uuid }
- *               checkInTime: { type: string }
- *               checkOutTime: { type: string }
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               updates:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [employeeId, date, status]
+ *                   properties:
+ *                     employeeId: { type: string, format: uuid }
+ *                     date: { type: string, format: date }
+ *                     status: { type: integer, nullable: true }
  *     responses:
- *       201: { description: Attendance marked; returns id }
+ *       200: { description: Updated register grid }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/employees/{employeeId}/cells:
+ *   put:
+ *     tags: [Attendance]
+ *     summary: Submit all attendance cells for one employee row
+ *     parameters:
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, month, year, cells]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               cells:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [date, status]
+ *                   properties:
+ *                     date: { type: string, format: date }
+ *                     status: { type: integer, nullable: true }
+ *     responses:
+ *       200: { description: Saved employee row and updated register metadata }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/bulk:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Bulk mark register (Sundays, all present, clear unmarked)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, month, year, action]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               action:
+ *                 type: string
+ *                 enum: [mark_sundays, mark_all_present, clear_unmarked]
+ *               status: { type: integer }
+ *     responses:
+ *       200: { description: Bulk update result with updated grid }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/import/template:
+ *   get:
+ *     tags: [Attendance]
+ *     summary: Download CSV import template
+ *     responses:
+ *       200:
+ *         description: CSV file
+ *         content:
+ *           text/csv:
+ *             schema: { type: string, format: binary }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/import/preview:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Preview CSV import without saving
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, month, year, content]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               content: { type: string }
+ *     responses:
+ *       200: { description: Valid rows, errors, and preview grid }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/import/apply:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Apply CSV import to register
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, month, year, content]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               content: { type: string }
+ *     responses:
+ *       200: { description: Applied/skipped counts with updated grid }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/import/file-preview:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Preview uploaded CSV file
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200: { description: Valid rows, errors, and preview grid }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/lock:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Submit and lock register for the month
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, month, year, verified]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               verified: { type: boolean }
+ *     responses:
+ *       200: { description: Locked register employee list }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/unlock:
+ *   post:
+ *     tags: [Attendance]
+ *     summary: Unlock register with audit reason
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, month, year, reason]
+ *             properties:
+ *               clientId: { type: string, format: uuid }
+ *               month: { type: integer }
+ *               year: { type: integer }
+ *               reason: { type: string }
+ *     responses:
+ *       200: { description: Unlocked register employee list }
+ */
+/**
+ * @openapi
+ * /api/attendance/registers/unlock-history:
+ *   get:
+ *     tags: [Attendance]
+ *     summary: Unlock audit log for a register
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Unlock log entries }
+ */
+/**
+ * @openapi
+ * /api/attendance/employees/{employeeId}/calendar:
+ *   get:
+ *     tags: [Attendance]
+ *     summary: Employee month calendar with summary
+ *     parameters:
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Day-wise calendar and month summary }
  */
 
 /**
@@ -661,6 +1247,32 @@
  */
 /**
  * @openapi
+ * /api/billing/invoices/suggested-line-items:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Suggested invoice line items from client department rates
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         schema: { type: integer, minimum: 1, maximum: 12 }
+ *       - in: query
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: Suggested line items with quantities and unit rates }
+ */
+/**
+ * @openapi
  * /api/billing/invoices/generate-by-sites:
  *   post:
  *     tags: [Billing]
@@ -794,24 +1406,75 @@
  *     parameters:
  *       - in: query
  *         name: page
- *         schema: { type: integer }
+ *         schema: { type: integer, default: 1 }
  *       - in: query
  *         name: pageSize
- *         schema: { type: integer }
+ *         schema: { type: integer, default: 20 }
  *       - in: query
  *         name: search
  *         schema: { type: string }
+ *       - in: query
+ *         name: isActive
+ *         schema: { type: boolean }
  *     responses:
- *       200: { description: Paginated clients }
+ *       200:
+ *         description: Paginated clients
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           clientCode: { type: string }
+ *                           companyName: { type: string }
+ *                           contactPerson: { type: string }
+ *                           email: { type: string }
+ *                           phone: { type: string }
+ *                           city: { type: string }
+ *                           state: { type: string }
+ *                           isActive: { type: boolean }
+ *                           totalSites: { type: integer }
  *   post:
  *     tags: [Clients]
  *     summary: Create client
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateClientBody'
  *     responses:
- *       201: { description: Client id }
+ *       201:
+ *         description: Client created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, format: uuid }
+ *                 clientCode: { type: string }
  */
 /**
  * @openapi
  * /api/clients/{id}:
+ *   get:
+ *     tags: [Clients]
+ *     summary: Get client by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Client detail }
+ *       404: { description: Client not found }
  *   put:
  *     tags: [Clients]
  *     summary: Update client
@@ -820,8 +1483,67 @@
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateClientBody'
  *     responses:
  *       200: { description: Updated client }
+ *       404: { description: Client not found }
+ *   delete:
+ *     tags: [Clients]
+ *     summary: Delete client
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       204: { description: Client deleted }
+ *       404: { description: Client not found }
+ */
+/**
+ * @openapi
+ * /api/clients/{id}/sites:
+ *   get:
+ *     tags: [Clients]
+ *     summary: List sites for a client
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200: { description: Paginated sites for the client }
+ *       404: { description: Client not found }
+ */
+/**
+ * @openapi
+ * /api/sites/summary:
+ *   get:
+ *     tags: [Sites]
+ *     summary: Site dashboard summary
+ *     responses:
+ *       200:
+ *         description: Aggregate site statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalSites: { type: integer }
+ *                 activeSites: { type: integer }
+ *                 totalHeadcountRequired: { type: integer }
+ *                 totalDeployed: { type: integer }
+ *                 understaffedSites: { type: integer }
  */
 /**
  * @openapi
@@ -831,13 +1553,107 @@
  *     summary: List sites
  *     parameters:
  *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
  *         name: clientId
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: search
  *         schema: { type: string }
+ *       - in: query
+ *         name: isActive
+ *         schema: { type: boolean }
  *     responses:
- *       200: { description: Site list }
+ *       200:
+ *         description: Paginated site list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PaginatedResponse'
+ *                 - type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string, format: uuid }
+ *                           siteCode: { type: string }
+ *                           siteName: { type: string }
+ *                           clientId: { type: string, format: uuid }
+ *                           clientCompanyName: { type: string }
+ *                           city: { type: string }
+ *                           state: { type: string }
+ *                           requiredHeadcount: { type: integer }
+ *                           deployedHeadcount: { type: integer }
+ *                           isActive: { type: boolean }
+ *   post:
+ *     tags: [Sites]
+ *     summary: Create site
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateSiteBody'
+ *     responses:
+ *       201:
+ *         description: Site created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string, format: uuid }
+ *                 siteCode: { type: string }
+ */
+/**
+ * @openapi
+ * /api/sites/{id}:
+ *   get:
+ *     tags: [Sites]
+ *     summary: Get site by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Site detail }
+ *       404: { description: Site not found }
+ *   put:
+ *     tags: [Sites]
+ *     summary: Update site
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateSiteBody'
+ *     responses:
+ *       200: { description: Updated site }
+ *       404: { description: Site not found }
+ *   delete:
+ *     tags: [Sites]
+ *     summary: Delete site
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       204: { description: Site deleted }
+ *       404: { description: Site not found }
  */
 /**
  * @openapi

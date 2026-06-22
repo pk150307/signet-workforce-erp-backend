@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { DatabaseError } from 'pg';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import { AppError, NotFoundError, ValidationError, UnauthorizedError } from '../common/errors';
 import { logger } from '../utils/logger';
 
@@ -54,6 +55,13 @@ export function errorHandler(
       status: err.statusCode,
       title: err.message,
       errors: err.errors,
+      traceId: req.traceId,
+    };
+  } else if (err instanceof multer.MulterError) {
+    response = {
+      status: 400,
+      title: err.code === 'LIMIT_FILE_SIZE' ? 'File too large' : 'Upload error',
+      detail: err.message,
       traceId: req.traceId,
     };
   } else if (err instanceof DatabaseError) {
