@@ -11,7 +11,12 @@ async function isPortFree(port: number): Promise<boolean> {
     server.once('listening', () => {
       server.close(() => resolve(true));
     });
+
+    //for production
     server.listen(port, 'signet-workforce-db.cnkkq6k8a3gr.ap-south-1.rds.amazonaws.com');
+
+    //for development
+    // server.listen(port, 'localhost');
   });
 }
 

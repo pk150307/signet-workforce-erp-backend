@@ -45,6 +45,8 @@ export async function resolveDepartmentId(
     if (byUuid.rows[0]) return byUuid.rows[0].id;
   }
 
+  assertClientScopeForCodeLookup(departmentId, options?.clientId, 'departmentId');
+
   const params: unknown[] = [departmentId];
   let extra = '';
   if (options?.clientId) {
@@ -82,6 +84,10 @@ export async function resolveDesignationId(
       params,
     );
     if (byUuid.rows[0]) return byUuid.rows[0].id;
+  }
+
+  if (!options?.departmentId && !options?.clientId?.trim()) {
+    assertClientScopeForCodeLookup(designationId, options?.clientId, 'designationId');
   }
 
   const params: unknown[] = [designationId];
@@ -126,6 +132,10 @@ export async function resolveDesignationGradeId(
       params,
     );
     if (byUuid.rows[0]) return byUuid.rows[0].id;
+  }
+
+  if (!options?.designationId && !options?.clientId?.trim()) {
+    assertClientScopeForCodeLookup(gradeId, options?.clientId, 'designationGradeId');
   }
 
   const params: unknown[] = [gradeId];
@@ -228,4 +238,17 @@ export function parseOptionalUuid(value: string | undefined | null): string | nu
   const uuidRegex =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return uuidRegex.test(value) ? value : null;
+}
+
+function assertClientScopeForCodeLookup(
+  reference: string,
+  clientId: string | undefined,
+  fieldLabel: string,
+): void {
+  if (!parseOptionalUuid(reference) && !clientId?.trim()) {
+    throw new ValidationError(
+      { clientId: [`clientId is required when ${fieldLabel} is a business code.`] },
+      `${fieldLabel} code lookup requires clientId.`,
+    );
+  }
 }
