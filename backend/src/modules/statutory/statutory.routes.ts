@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { statutoryController } from './statutory.controller';
 import {
   employeeIdParamValidation,
+  exportPfEsicValidation,
   listPfEsicValidation,
   upsertPfEsicValidation,
 } from './statutory.validation';
@@ -11,6 +12,10 @@ import { body } from 'express-validator';
 
 const router = Router();
 router.use(authenticate);
+
+router.get('/pf-esic/export', validate(exportPfEsicValidation), (req, res, next) => {
+  statutoryController.export(req, res).catch(next);
+});
 
 router.get('/pf-esic', validate(listPfEsicValidation), (req, res, next) => {
   statutoryController.list(req, res).catch(next);

@@ -1,46 +1,41 @@
 import { Router } from 'express';
-import { query as queryValidator } from 'express-validator';
-import { query as dbQuery } from '../../database/pool';
 import { authenticate } from '../../middleware/auth.middleware';
-import { sendSuccess, validate } from '../../common/response';
+import { validate } from '../../common/response';
+import { designationController } from './designation.controller';
+import {
+  createDesignationValidation,
+  designationIdValidation,
+  listDesignationsValidation,
+  nextDesignationCodeValidation,
+  updateDesignationValidation,
+} from './designation.validation';
 
 const router = Router();
+
 router.use(authenticate);
 
-router.get(
-  '/',
-  validate([queryValidator('departmentId').optional().isString()]),
-  async (req, res, next) => {
-    try {
-      const departmentId = req.query.departmentId as string | undefined;
-      const params: unknown[] = [];
-      let filter = 'des.is_active AND NOT des.is_deleted';
+router.get('/', validate(listDesignationsValidation), (req, res, next) => {
+  designationController.list(req, res).catch(next);
+});
 
-      if (departmentId) {
-        filter += ` AND (des.department_id = $1::uuid OR d.code = $1)`;
-        params.push(departmentId);
-      }
+router.get('/next-code', validate(nextDesignationCodeValidation), (req, res, next) => {
+  designationController.generateCode(req, res).catch(next);
+});
 
-      const { rows } = await dbQuery<{
-        id: string;
-        code: string;
-        name: string;
-        department_id: string;
-        department_name: string;
-        level: number;
-      }>(
-        `SELECT des.code AS id, des.code, des.name, d.code AS department_id, d.name AS department_name, des.level
-         FROM designations des
-         INNER JOIN departments d ON d.id = des.department_id
-         WHERE ${filter}
-         ORDER BY des.level, des.name`,
-        params,
-      );
-      sendSuccess(res, rows);
-    } catch (e) {
-      next(e);
-    }
-  },
-);
+router.post('/', validate(createDesignationValidation), (req, res, next) => {
+  designationController.create(req, res).catch(next);
+});
+
+router.get('/:id', validate(designationIdValidation), (req, res, next) => {
+  designationController.getById(req, res).catch(next);
+});
+
+router.put('/:id', validate(updateDesignationValidation), (req, res, next) => {
+  designationController.update(req, res).catch(next);
+});
+
+router.delete('/:id', validate(designationIdValidation), (req, res, next) => {
+  designationController.delete(req, res).catch(next);
+});
 
 export default router;

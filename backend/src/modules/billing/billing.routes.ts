@@ -7,6 +7,7 @@ import { createPaginatedResult } from '../../types';
 import { InvoiceStatus } from '../../types/enums';
 import { formatDate, toNumber } from '../../utils/formatters';
 import { billingService } from './billing.service';
+import { renderInvoiceHtml } from './billing.print';
 import { paramId } from '../../utils/request';
 
 const router = Router();
@@ -62,7 +63,8 @@ router.get(
 
       const { rows } = await dbQuery<Record<string, unknown>>(
         `SELECT i.id, i.invoice_number, c.company_name AS client_name, i.invoice_date,
-                i.due_date, i.total_amount, i.paid_amount, i.status, s.site_name
+                i.due_date, i.sub_total, i.gst_amount, i.total_amount, i.paid_amount,
+                i.status, s.site_name, i.month, i.year
          FROM invoices i
          INNER JOIN clients c ON c.id = i.client_id
          LEFT JOIN sites s ON s.id = i.site_id
@@ -76,13 +78,17 @@ router.get(
         id: String(r.id),
         invoiceNumber: String(r.invoice_number),
         clientName: String(r.client_name),
-        invoiceDate: formatDate(String(r.invoice_date)),
-        dueDate: formatDate(String(r.due_date)),
+        invoiceDate: formatDate(r.invoice_date as Date | string),
+        dueDate: formatDate(r.due_date as Date | string),
+        subTotal: toNumber(r.sub_total as string),
+        gstAmount: toNumber(r.gst_amount as string),
         totalAmount: toNumber(r.total_amount as string),
         paidAmount: toNumber(r.paid_amount as string),
         balanceAmount: toNumber(r.total_amount as string) - toNumber(r.paid_amount as string),
         status: Number(r.status) as InvoiceStatus,
         siteName: r.site_name ? String(r.site_name) : null,
+        month: Number(r.month),
+        year: Number(r.year),
       }));
 
       sendSuccess(
@@ -175,11 +181,35 @@ router.post(
   },
 );
 
+router.get(
+  '/invoices/suggested-line-items',
+  validate([
+    query('clientId').isUUID(),
+    query('siteId').isUUID(),
+    query('month').isInt({ min: 1, max: 12 }).toInt(),
+    query('year').isInt({ min: 2000, max: 2100 }).toInt(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingService.getSuggestedLineItems(
+        String(req.query.clientId),
+        String(req.query.siteId),
+        Number(req.query.month),
+        Number(req.query.year),
+      );
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.post(
   '/invoices/generate-by-sites',
   validate([
     body('month').isInt({ min: 1, max: 12 }),
     body('year').isInt({ min: 2000, max: 2100 }),
+    body('siteId').optional().isUUID(),
     body('siteIds').optional().isArray(),
     body('siteIds.*').optional().isUUID(),
     body('gstRate').optional().isFloat({ min: 0, max: 28 }),
@@ -191,7 +221,59 @@ router.post(
       const result = await billingService.generateInvoicesBySites({
         month: Number(req.body.month),
         year: Number(req.body.year),
+        siteId: req.body.siteId,
         siteIds: req.body.siteIds,
+        gstRate: req.body.gstRate,
+        dueDateDays: req.body.dueDateDays,
+        notes: req.body.notes,
+        createdBy: req.user?.username ?? 'System',
+      });
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/invoices/preview-for-site',
+  validate([
+    query('siteId').isUUID(),
+    query('month').isInt({ min: 1, max: 12 }).toInt(),
+    query('year').isInt({ min: 2000, max: 2100 }).toInt(),
+    query('gstRate').optional().isFloat({ min: 0, max: 28 }).toFloat(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingService.previewSiteInvoice(
+        String(req.query.siteId),
+        Number(req.query.month),
+        Number(req.query.year),
+        req.query.gstRate ? Number(req.query.gstRate) : 18,
+      );
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/invoices/generate-for-site',
+  validate([
+    body('siteId').isUUID(),
+    body('month').isInt({ min: 1, max: 12 }),
+    body('year').isInt({ min: 2000, max: 2100 }),
+    body('gstRate').optional().isFloat({ min: 0, max: 28 }),
+    body('dueDateDays').optional().isInt({ min: 1, max: 90 }),
+    body('notes').optional().isString(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingService.generateInvoiceForSite({
+        siteId: req.body.siteId,
+        month: Number(req.body.month),
+        year: Number(req.body.year),
         gstRate: req.body.gstRate,
         dueDateDays: req.body.dueDateDays,
         notes: req.body.notes,
@@ -271,6 +353,109 @@ router.get('/invoices/:id', validate([param('id').isUUID()]), async (req: Reques
   try {
     const result = await billingService.getInvoiceById(paramId(req));
     sendSuccess(res, result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.put(
+  '/invoices/:id',
+  validate([
+    param('id').isUUID(),
+    body('invoiceDate').optional().isISO8601(),
+    body('dueDate').optional().isISO8601(),
+    body('gstRate').optional().isFloat({ min: 0, max: 28 }),
+    body('lineItems').optional().isArray({ min: 1 }),
+    body('lineItems.*.description').optional().notEmpty(),
+    body('lineItems.*.quantity').optional().isFloat({ min: 0.01 }),
+    body('lineItems.*.unitRate').optional().isFloat({ min: 0 }),
+    body('notes').optional().isString(),
+    body('termsAndConditions').optional().isString(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingService.updateInvoice(paramId(req), {
+        invoiceDate: req.body.invoiceDate,
+        dueDate: req.body.dueDate,
+        gstRate: req.body.gstRate,
+        notes: req.body.notes,
+        termsAndConditions: req.body.termsAndConditions,
+        lineItems: req.body.lineItems,
+        updatedBy: req.user?.username ?? 'System',
+      });
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.delete('/invoices/:id', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await billingService.deleteInvoice(paramId(req), req.user?.username ?? 'System');
+    sendSuccess(res, { deleted: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.patch(
+  '/invoices/:id/status',
+  validate([
+    param('id').isUUID(),
+    body('status').isInt({ min: 1, max: 7 }),
+    body('paidAmount').optional().isFloat({ min: 0 }),
+    body('note').optional().isString(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingService.updateInvoiceStatus(paramId(req), {
+        status: Number(req.body.status),
+        paidAmount: req.body.paidAmount,
+        note: req.body.note,
+        updatedBy: req.user?.username ?? 'System',
+      });
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get('/invoices/:id/pdf', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invoice = await billingService.getInvoiceById(paramId(req));
+    const html = renderInvoiceHtml(invoice);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.html"`);
+    res.send(html);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/invoices/:id/print', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invoice = await billingService.getInvoiceById(paramId(req));
+    const html = renderInvoiceHtml(invoice);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/invoices/:id/email', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invoice = await billingService.getInvoiceById(paramId(req));
+    if (invoice.status === InvoiceStatus.Draft) {
+      await billingService.updateInvoiceStatus(paramId(req), {
+        status: InvoiceStatus.Sent,
+        note: 'Invoice emailed to client',
+        updatedBy: req.user?.username ?? 'System',
+      });
+    }
+    sendSuccess(res, { queued: true, invoiceNumber: invoice.invoiceNumber });
   } catch (e) {
     next(e);
   }

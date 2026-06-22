@@ -112,7 +112,18 @@ router.post(
         const leaveDays = parseFloat(leaveResult.rows[0].sum ?? '0');
         const absentDays = Math.max(0, workingDays - presentDays - leaveDays);
 
+        const otResult = await dbQuery<{ hours: string }>(
+          `SELECT COALESCE(SUM(aro.overtime_hours), 0) AS hours
+           FROM attendance_register_employee_overtime aro
+           INNER JOIN attendance_registers ar ON ar.id = aro.register_id
+           WHERE aro.employee_id = $1 AND ar.month = $2 AND ar.year = $3`,
+          [employee.id, month, year],
+        );
+        const overtimeHours = parseFloat(otResult.rows[0]?.hours ?? '0');
+
         const perDaySalary = basicSalary / workingDays;
+        const hourlyRate = perDaySalary / 8;
+        const overtimePay = round2(overtimeHours * hourlyRate * 2);
         const basicEarned = perDaySalary * presentDays;
         const hraEarned = (grossSalary - basicSalary) * 0.4 * (presentDays / workingDays);
         const specialAllowance = (grossSalary - basicSalary) * 0.6 * (presentDays / workingDays);
@@ -120,7 +131,7 @@ router.post(
         const esi = grossSalary <= 21000 ? basicEarned * 0.0075 : 0;
         const pt = basicEarned > 15000 ? 200 : 150;
 
-        const gross = round2(basicEarned + hraEarned + specialAllowance);
+        const gross = round2(basicEarned + hraEarned + specialAllowance + overtimePay);
         const deductions = round2(pf + esi + pt);
         totalGross += gross;
         totalDeductions += deductions;
@@ -129,13 +140,15 @@ router.post(
           `INSERT INTO payroll_entries (
             employee_id, payroll_run_id, month, year, working_days, present_days,
             leave_days, absent_days, basic_salary, house_rent_allowance, special_allowance,
-            provident_fund, esi, professional_tax, status, created_by
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+            overtime_hours, overtime_pay, provident_fund, esi, professional_tax, status, created_by
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
           ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
             working_days = EXCLUDED.working_days, present_days = EXCLUDED.present_days,
             leave_days = EXCLUDED.leave_days, absent_days = EXCLUDED.absent_days,
             basic_salary = EXCLUDED.basic_salary, house_rent_allowance = EXCLUDED.house_rent_allowance,
-            special_allowance = EXCLUDED.special_allowance, provident_fund = EXCLUDED.provident_fund,
+            special_allowance = EXCLUDED.special_allowance,
+            overtime_hours = EXCLUDED.overtime_hours, overtime_pay = EXCLUDED.overtime_pay,
+            provident_fund = EXCLUDED.provident_fund,
             esi = EXCLUDED.esi, professional_tax = EXCLUDED.professional_tax,
             status = EXCLUDED.status, updated_at = NOW(), updated_by = EXCLUDED.created_by`,
           [
@@ -150,6 +163,8 @@ router.post(
             round2(basicEarned),
             round2(hraEarned),
             round2(specialAllowance),
+            round2(overtimeHours),
+            overtimePay,
             round2(pf),
             round2(esi),
             pt,

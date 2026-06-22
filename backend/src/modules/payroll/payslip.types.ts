@@ -2,6 +2,8 @@ export interface PayslipLineItem {
   code: string;
   label: string;
   amount: number;
+  rate?: number | null;
+  note?: string | null;
 }
 
 export interface PayslipListItem {
@@ -18,12 +20,15 @@ export interface PayslipListItem {
   grossEarnings: number;
   totalDeductions: number;
   netSalary: number;
+  status: string;
   generatedAt: string;
   filePath: string | null;
 }
 
 export interface PayslipPrintData {
+  id: string;
   slipNumber: string;
+  status: string;
   generatedAt: string;
   payPeriod: {
     month: number;
@@ -34,7 +39,14 @@ export interface PayslipPrintData {
   };
   company: {
     name: string;
+    legalName: string | null;
     address: string;
+    gstNumber: string | null;
+    panNumber: string | null;
+    registrationNumber: string | null;
+    email: string | null;
+    phone: string | null;
+    website: string | null;
   };
   employee: {
     id: string;
@@ -71,6 +83,9 @@ export interface GeneratePayslipsInput {
   month: number;
   year: number;
   createdBy: string;
+  employeeIds?: string[];
+  clientId?: string;
+  departmentId?: string;
 }
 
 export interface PayslipFilter {
@@ -79,4 +94,20 @@ export interface PayslipFilter {
   month?: number;
   year?: number;
   employeeId?: string;
+  clientId?: string;
+  departmentId?: string;
+  search?: string;
+  status?: string;
+}
+
+export interface UpdatePayslipStatusInput {
+  status: string;
+  updatedBy: string;
+  note?: string;
+}
+
+export interface BulkPayslipActionInput {
+  payslipIds: string[];
+  action: 'email' | 'download';
+  updatedBy: string;
 }

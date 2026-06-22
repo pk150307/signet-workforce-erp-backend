@@ -1,21 +1,41 @@
 import { Router } from 'express';
-import { query } from '../../database/pool';
 import { authenticate } from '../../middleware/auth.middleware';
-import { sendSuccess } from '../../common/response';
+import { validate } from '../../common/response';
+import { departmentController } from './department.controller';
+import {
+  createDepartmentValidation,
+  departmentIdValidation,
+  listDepartmentsValidation,
+  nextDepartmentCodeValidation,
+  updateDepartmentValidation,
+} from './department.validation';
 
 const router = Router();
+
 router.use(authenticate);
 
-router.get('/', async (_req, res, next) => {
-  try {
-    const { rows } = await query<{ id: string; code: string; name: string; description: string | null }>(
-      `SELECT code AS id, code, name, description FROM departments
-       WHERE is_active AND NOT is_deleted ORDER BY name`,
-    );
-    sendSuccess(res, rows);
-  } catch (e) {
-    next(e);
-  }
+router.get('/', validate(listDepartmentsValidation), (req, res, next) => {
+  departmentController.list(req, res).catch(next);
+});
+
+router.get('/next-code', validate(nextDepartmentCodeValidation), (req, res, next) => {
+  departmentController.generateCode(req, res).catch(next);
+});
+
+router.post('/', validate(createDepartmentValidation), (req, res, next) => {
+  departmentController.create(req, res).catch(next);
+});
+
+router.get('/:id', validate(departmentIdValidation), (req, res, next) => {
+  departmentController.getById(req, res).catch(next);
+});
+
+router.put('/:id', validate(updateDepartmentValidation), (req, res, next) => {
+  departmentController.update(req, res).catch(next);
+});
+
+router.delete('/:id', validate(departmentIdValidation), (req, res, next) => {
+  departmentController.delete(req, res).catch(next);
 });
 
 export default router;

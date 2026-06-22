@@ -7,6 +7,10 @@ export class StatutoryService {
     return statutoryRepository.findAll(filter);
   }
 
+  export(filter: StatutoryFilter) {
+    return statutoryRepository.exportCsv(filter);
+  }
+
   async getByEmployeeId(employeeId: string) {
     const detail = await statutoryRepository.findByEmployeeId(employeeId);
     if (!detail) throw new NotFoundError('Employee', employeeId);
