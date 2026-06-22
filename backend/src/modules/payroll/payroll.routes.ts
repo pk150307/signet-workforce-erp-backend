@@ -6,6 +6,7 @@ import { sendId, sendSuccess, validate } from '../../common/response';
 import { EmployeeStatus, AttendanceStatus, LeaveStatus, PayrollStatus } from '../../types/enums';
 import { countWorkingDays, monthName, round2, toNumber } from '../../utils/formatters';
 import { AppError } from '../../common/errors';
+import { resolvePayrollRunId } from '../../utils/payroll-run';
 import payslipRoutes from './payslip.routes';
 
 const router = Router();
@@ -47,25 +48,14 @@ router.post(
     try {
       const month = Number(req.body.month);
       const year = Number(req.body.year);
-      const runCode = `PR-${year}${String(month).padStart(2, '0')}`;
-
-      const { rows: existingRows } = await dbQuery<{ id: string; status: number }>(
-        `SELECT id, status FROM payroll_runs WHERE month = $1 AND year = $2 AND NOT is_deleted`,
-        [month, year],
+      const { id: payrollRunId, status } = await resolvePayrollRunId(
+        month,
+        year,
+        req.user?.username ?? 'System',
       );
 
-      let payrollRunId = existingRows[0]?.id;
-      if (existingRows[0] && existingRows[0].status !== PayrollStatus.Draft) {
+      if (status !== PayrollStatus.Draft) {
         throw new AppError(400, `Payroll for ${month}/${year} has already been processed.`);
-      }
-
-      if (!payrollRunId) {
-        const { rows } = await dbQuery<{ id: string }>(
-          `INSERT INTO payroll_runs (run_code, month, year, status, created_by)
-           VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-          [runCode, month, year, PayrollStatus.Draft, req.user?.username ?? 'System'],
-        );
-        payrollRunId = rows[0].id;
       }
 
       let employeeSql = `SELECT id, basic_salary, gross_salary FROM employees

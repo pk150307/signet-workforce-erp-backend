@@ -22,6 +22,7 @@ export interface CreateDesignationInput {
   designationName: string;
   parentDesignationId?: string | null;
   departmentId: string;
+  clientId?: string;
   description?: string | null;
   isActive?: boolean;
   createdBy: string;

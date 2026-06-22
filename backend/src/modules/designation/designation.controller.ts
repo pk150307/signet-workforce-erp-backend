@@ -35,7 +35,8 @@ export class DesignationController {
 
   async generateCode(req: Request, res: Response): Promise<void> {
     const departmentId = String(req.query.departmentId ?? '');
-    const result = await designationService.generateDesignationCode(departmentId);
+    const clientId = req.query.clientId as string | undefined;
+    const result = await designationService.generateDesignationCode(departmentId, clientId);
     sendSuccess(res, result);
   }
 

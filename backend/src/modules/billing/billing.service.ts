@@ -15,6 +15,7 @@ import {
 import { createPaginatedResult, PaginatedResult } from '../../types';
 import { InvoiceStatus, EmployeeStatus } from '../../types/enums';
 import { countWorkingDays, formatDate, formatDateTime, round2, toNumber, monthName } from '../../utils/formatters';
+import { nextInvoiceNumber } from '../../utils/next-code';
 import { AppError, NotFoundError } from '../../common/errors';
 import { companyRepository } from '../company/company.repository';
 import {
@@ -149,8 +150,7 @@ export class BillingRepository {
     lineItems: Array<{ description: string; quantity: number; unitRate: number; hsnSacCode?: string }>;
     createdBy: string;
   }): Promise<{ id: string; invoiceNumber: string; totalAmount: number }> {
-    const countResult = await query<{ count: string }>('SELECT COUNT(*) AS count FROM invoices');
-    const invoiceNumber = `INV-${data.year}${String(data.month).padStart(2, '0')}-${String(parseInt(countResult.rows[0].count, 10) + 1).padStart(4, '0')}`;
+    const invoiceNumber = await nextInvoiceNumber(data.year, data.month);
 
     const subTotal = data.lineItems.reduce((sum, li) => sum + li.quantity * li.unitRate, 0);
     const gstAmount = round2(subTotal * (data.gstRate / 100));

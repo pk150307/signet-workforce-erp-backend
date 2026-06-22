@@ -1,5 +1,6 @@
 import { query } from '../../database/pool';
 import { createPaginatedResult, PaginatedResult } from '../../types';
+import { nextClientCode } from '../../utils/next-code';
 import {
   ClientDetail,
   ClientFilter,
@@ -61,10 +62,7 @@ export class ClientRepository {
   }
 
   async create(input: CreateClientInput): Promise<{ id: string; clientCode: string }> {
-    const countResult = await query<{ count: string }>(
-      'SELECT COUNT(*) AS count FROM clients WHERE NOT is_deleted',
-    );
-    const clientCode = `CLT-${String(parseInt(countResult.rows[0].count, 10) + 1).padStart(4, '0')}`;
+    const clientCode = await nextClientCode();
 
     const { rows } = await query<{ id: string }>(
       `INSERT INTO clients (

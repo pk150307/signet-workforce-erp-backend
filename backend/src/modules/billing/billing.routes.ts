@@ -6,6 +6,7 @@ import { sendId, sendSuccess, validate } from '../../common/response';
 import { createPaginatedResult } from '../../types';
 import { InvoiceStatus } from '../../types/enums';
 import { formatDate, toNumber } from '../../utils/formatters';
+import { nextInvoiceNumber } from '../../utils/next-code';
 import { billingService } from './billing.service';
 import { renderInvoiceHtml } from './billing.print';
 import { paramId } from '../../utils/request';
@@ -118,8 +119,9 @@ router.post(
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const countResult = await dbQuery<{ count: string }>('SELECT COUNT(*) AS count FROM invoices');
-      const invoiceNumber = `INV-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(parseInt(countResult.rows[0].count, 10) + 1).padStart(4, '0')}`;
+      const month = Number(req.body.month);
+      const year = Number(req.body.year);
+      const invoiceNumber = await nextInvoiceNumber(year, month);
 
       const lineItems = req.body.lineItems as Array<{
         description: string;

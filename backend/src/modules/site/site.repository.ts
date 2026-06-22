@@ -1,5 +1,6 @@
 import { query } from '../../database/pool';
 import { createPaginatedResult, PaginatedResult } from '../../types';
+import { nextSiteCode } from '../../utils/next-code';
 import {
   CreateSiteInput,
   SiteDetail,
@@ -89,10 +90,7 @@ export class SiteRepository {
   }
 
   async create(input: CreateSiteInput): Promise<{ id: string; siteCode: string }> {
-    const countResult = await query<{ count: string }>(
-      'SELECT COUNT(*) AS count FROM sites WHERE NOT is_deleted',
-    );
-    const siteCode = `SITE-${String(parseInt(countResult.rows[0].count, 10) + 1).padStart(4, '0')}`;
+    const siteCode = await nextSiteCode();
 
     const { rows } = await query<{ id: string }>(
       `INSERT INTO sites (

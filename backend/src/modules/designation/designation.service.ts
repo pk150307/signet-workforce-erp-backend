@@ -17,8 +17,10 @@ export class DesignationService {
     return designationRepository.create(input);
   }
 
-  generateDesignationCode(departmentId: string) {
-    return designationRepository.getNextDesignationCode(departmentId).then((code) => ({ code }));
+  generateDesignationCode(departmentId: string, clientId?: string) {
+    return designationRepository
+      .getNextDesignationCode(departmentId, clientId)
+      .then((code) => ({ code }));
   }
 
   async update(input: UpdateDesignationInput) {

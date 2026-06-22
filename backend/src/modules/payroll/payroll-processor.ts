@@ -19,6 +19,7 @@ import {
   computeTotalGrossEarned,
   resolveStatutoryConfig,
 } from '../statutory/statutory.calculation';
+import { resolvePayrollRunId } from '../../utils/payroll-run';
 
 export interface ProcessPayrollOptions {
   month: number;
@@ -31,26 +32,7 @@ export interface ProcessPayrollOptions {
 
 export async function processPayrollForPeriod(options: ProcessPayrollOptions): Promise<string> {
   const { month, year, createdBy } = options;
-  const runCode = `PR-${year}${String(month).padStart(2, '0')}`;
-
-  const { rows: existingRows } = await query<{ id: string; status: number }>(
-    `SELECT id, status FROM payroll_runs WHERE month = $1 AND year = $2 AND NOT is_deleted`,
-    [month, year],
-  );
-
-  let payrollRunId = existingRows[0]?.id;
-  if (existingRows[0] && existingRows[0].status !== PayrollStatus.Draft) {
-    payrollRunId = existingRows[0].id;
-  }
-
-  if (!payrollRunId) {
-    const { rows } = await query<{ id: string }>(
-      `INSERT INTO payroll_runs (run_code, month, year, status, created_by)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [runCode, month, year, PayrollStatus.Draft, createdBy],
-    );
-    payrollRunId = rows[0].id;
-  }
+  const { id: payrollRunId } = await resolvePayrollRunId(month, year, createdBy);
 
   let employeeSql = `
     SELECT e.id,

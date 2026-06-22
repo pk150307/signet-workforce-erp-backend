@@ -12,6 +12,7 @@ export const listDesignationsValidation = [
 
 export const nextDesignationCodeValidation = [
   query('departmentId').notEmpty().isString().trim().withMessage('departmentId is required'),
+  query('clientId').optional().isString().trim(),
 ];
 
 export const designationIdValidation = [
@@ -23,6 +24,7 @@ const designationBodyFields = [
   body('designationName').notEmpty().isString().trim().isLength({ max: 200 }),
   body('parentDesignationId').optional({ nullable: true }).isString().trim(),
   body('departmentId').notEmpty().isString().trim(),
+  body('clientId').optional({ nullable: true }).isString().trim(),
   body('description').optional({ nullable: true }).isString().trim(),
   body('isActive').optional().isBoolean(),
 ];

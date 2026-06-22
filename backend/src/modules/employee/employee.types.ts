@@ -38,8 +38,10 @@ export interface EmployeeDetail {
   status: EmployeeLifecycleStatus;
   employmentType: EmploymentType;
   departmentId: string;
+  departmentCode?: string | null;
   departmentName: string;
   designationId: string;
+  designationCode?: string | null;
   designationName: string;
   designationGradeId: string | null;
   gradeCode: string | null;

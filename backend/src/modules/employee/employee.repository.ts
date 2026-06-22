@@ -36,6 +36,7 @@ import {
   resolveDesignationGradeId,
 } from '../../utils/organization';
 import { formatDate, formatDateTime, toNumber } from '../../utils/formatters';
+import { nextEmployeeCode } from '../../utils/next-code';
 import { getPublicUrl, uploadRoot } from '../documents/upload.config';
 import { designationGradeRepository } from '../designation-grade/designation-grade.repository';
 import { computeGradeGross } from '../designation-grade/designation-grade.types';
@@ -194,16 +195,11 @@ export class EmployeeRepository {
   }
 
   async getNextEmployeeCode(): Promise<string> {
-    const { rows } = await query<{ next_num: string }>(
-      `SELECT COALESCE(MAX(
-        CAST(substring(employee_code from '[0-9]+$') AS INTEGER)
-      ), 0) + 1 AS next_num
-       FROM employees
-       WHERE employee_code ~ $1 AND NOT is_deleted`,
-      [`^${EMPLOYEE_CODE_PREFIX.replace('-', '\\-')}[0-9]+$`],
+    return nextEmployeeCode(
+      EMPLOYEE_CODE_PREFIX.replace(/-$/, ''),
+      EMPLOYEE_CODE_PAD_LENGTH,
+      `^${EMPLOYEE_CODE_PREFIX.replace('-', '\\-')}[0-9]+$`,
     );
-    const nextNumber = parseInt(rows[0]?.next_num ?? '1', 10);
-    return `${EMPLOYEE_CODE_PREFIX}${String(nextNumber).padStart(EMPLOYEE_CODE_PAD_LENGTH, '0')}`;
   }
 
   async emailExists(email: string, excludeId?: string): Promise<boolean> {
@@ -250,11 +246,13 @@ export class EmployeeRepository {
       resignationDate: formatDate(r.resignation_date as string | null),
       status: Number(r.status) as EmployeeLifecycleStatus,
       employmentType: Number(r.employment_type),
-      departmentId: String(r.department_code),
+      departmentId: String(r.department_id),
+      departmentCode: r.department_code ? String(r.department_code) : null,
       departmentName: String(r.department_name),
-      designationId: String(r.designation_code),
+      designationId: String(r.designation_id),
+      designationCode: r.designation_code ? String(r.designation_code) : null,
       designationName: String(r.designation_name),
-      designationGradeId: r.grade_code ? String(r.grade_code) : null,
+      designationGradeId: r.grade_uuid ? String(r.grade_uuid) : null,
       gradeCode: r.grade_code ? String(r.grade_code) : null,
       gradeName: r.grade_name ? String(r.grade_name) : null,
       reportingManagerId: r.reporting_manager_id ? String(r.reporting_manager_id) : null,
@@ -339,8 +337,8 @@ export class EmployeeRepository {
     COALESCE(ed.basic_salary, e.basic_salary) AS basic_salary,
     COALESCE(ed.gross_salary, e.gross_salary) AS gross_salary,
     COALESCE(ed.ctc, e.ctc) AS ctc,
-    d.code AS department_code, d.name AS department_name,
-    des.code AS designation_code, des.name AS designation_name,
+    d.id AS department_id, d.code AS department_code, d.name AS department_name,
+    des.id AS designation_id, des.code AS designation_code, des.name AS designation_name,
     dg.id AS grade_uuid, dg.code AS grade_code, dg.name AS grade_name,
     rm.first_name AS rm_first_name, rm.last_name AS rm_last_name,
     s.site_name,

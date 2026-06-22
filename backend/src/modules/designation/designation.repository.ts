@@ -69,8 +69,8 @@ export class DesignationRepository {
     return rows[0] ? this.mapDetail(rows[0]) : null;
   }
 
-  async getNextDesignationCode(departmentId: string): Promise<string> {
-    const resolvedDepartmentId = await resolveDepartmentId(departmentId);
+  async getNextDesignationCode(departmentId: string, clientId?: string): Promise<string> {
+    const resolvedDepartmentId = await resolveDepartmentId(departmentId, { clientId });
     const { rows } = await query<{ code: string }>(
       `SELECT code FROM designations
        WHERE department_id = $1::uuid AND NOT is_deleted`,
@@ -80,7 +80,9 @@ export class DesignationRepository {
   }
 
   async create(input: CreateDesignationInput): Promise<{ id: string }> {
-    const departmentId = await resolveDepartmentId(input.departmentId);
+    const departmentId = await resolveDepartmentId(input.departmentId, {
+      clientId: input.clientId,
+    });
 
     const { rows } = await query<{ id: string }>(
       `INSERT INTO designations (code, name, department_id, level, is_active, created_by)
@@ -178,7 +180,9 @@ export class DesignationRepository {
     }
 
     if (filter.departmentId) {
-      const departmentId = await resolveDepartmentId(filter.departmentId);
+      const departmentId = await resolveDepartmentId(filter.departmentId, {
+        clientId: filter.clientId,
+      });
       conditions.push(`des.department_id = $${i++}::uuid`);
       params.push(departmentId);
     }

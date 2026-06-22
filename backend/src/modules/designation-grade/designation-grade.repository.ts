@@ -210,13 +210,18 @@ export class DesignationGradeRepository {
     }
 
     if (filter.designationId) {
-      const designationId = await resolveDesignationId(filter.designationId);
+      const designationId = await resolveDesignationId(filter.designationId, {
+        clientId: filter.clientId,
+        departmentId: filter.departmentId,
+      });
       conditions.push(`dg.designation_id = $${i++}::uuid`);
       params.push(designationId);
     }
 
     if (filter.departmentId) {
-      const departmentId = await resolveDepartmentId(filter.departmentId);
+      const departmentId = await resolveDepartmentId(filter.departmentId, {
+        clientId: filter.clientId,
+      });
       conditions.push(`des.department_id = $${i++}::uuid`);
       params.push(departmentId);
     }
