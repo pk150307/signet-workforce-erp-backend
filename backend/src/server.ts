@@ -1,9 +1,8 @@
-import { createApp } from './app';
 import { config } from './config';
-import { getStorageDiagnostics } from './config/s3';
 import { connectDB, pool } from './database';
 import { runMigrations } from './database/migrate';
 import { seedDatabase } from './database/seed';
+import { initializeStorage, getStorageStatus } from './modules/documents/storage.service';
 import { logger, logUncaughtExceptions } from './utils/logger';
 
 async function bootstrap(): Promise<void> {
@@ -44,21 +43,24 @@ async function bootstrap(): Promise<void> {
     ]);
     console.log('[startup] ✅ Seeding completed');
 
-    const storage = getStorageDiagnostics();
-    console.log(`[startup] 📦 File storage: ${storage.backend.toUpperCase()}`);
+    console.log('[startup] 📦 Initializing file storage...');
+    await initializeStorage();
+    const storage = getStorageStatus();
+    console.log(`[startup] ✅ File storage: ${storage.backend.toUpperCase()}`);
     if (storage.backend === 's3') {
       console.log(`[startup]    bucket=${storage.bucket} region=${storage.region}`);
-    } else if (config.isProduction) {
-      console.warn('[startup] ⚠️  Production is using local disk storage — set AWS_* env vars for S3');
-      if (storage.missingEnv.length > 0) {
-        console.warn(`[startup]    missing: ${storage.missingEnv.join(', ')}`);
-      }
+    } else {
+      console.log(`[startup]    uploadRoot=${storage.uploadRoot}`);
+    }
+    if (storage.error && !config.isProduction) {
+      console.warn(`[startup]    note: ${storage.error}`);
     }
 
     // ---------------------------
     // 4. CREATE APP
     // ---------------------------
     console.log('[startup] 🧩 Creating app...');
+    const { createApp } = await import('./app');
     const app = createApp();
 
     // ---------------------------
