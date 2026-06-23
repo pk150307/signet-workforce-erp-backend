@@ -186,13 +186,7 @@
       "CreateClientBody": {
         "type": "object",
         "required": [
-          "companyName",
-          "contactPerson",
-          "email",
-          "phone",
-          "address",
-          "city",
-          "state"
+          "companyName"
         ],
         "properties": {
           "companyName": {

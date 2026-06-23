@@ -41,6 +41,12 @@ export const config = {
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:4200').split(',').map((o) => o.trim()),
   uploadPath: process.env.UPLOAD_PATH ?? 'uploads',
   publicBaseUrl: process.env.PUBLIC_BASE_URL ?? 'http://localhost:5000/uploads',
+  aws: {
+    region: process.env.AWS_REGION,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    bucketName: process.env.AWS_BUCKET_NAME,
+  },
   rateLimit: {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '900000', 10),
     max: parseInt(process.env.RATE_LIMIT_MAX ?? '200', 10),
