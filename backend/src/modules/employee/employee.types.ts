@@ -111,6 +111,17 @@ export interface EmployeeDocumentItem {
   uploadedAt: string;
 }
 
+export type DocumentDownloadSource = 'disk' | 's3' | 'url';
+
+export interface DocumentDownloadInfo {
+  fileName: string;
+  mimeType: string;
+  source: DocumentDownloadSource;
+  diskPath?: string;
+  s3Key?: string;
+  url?: string;
+}
+
 export interface EmployeeTimelineItem {
   id: string;
   eventType: EmployeeHistoryEventType;

@@ -7,7 +7,7 @@ import {
   OfficeListItem,
   UpdateCompanyProfileInput,
 } from './company.types';
-import { getPublicUrl } from '../documents/upload.config';
+import { resolveFileUrl } from '../documents/upload.config';
 
 export class CompanyRepository {
   async getProfile(): Promise<CompanyProfile | null> {
@@ -224,7 +224,7 @@ export class CompanyRepository {
       billingCity: r.billing_city ? String(r.billing_city) : null,
       billingState: r.billing_state ? String(r.billing_state) : null,
       billingPinCode: r.billing_pin_code ? String(r.billing_pin_code) : null,
-      logoUrl: logoPath?.startsWith('http') ? logoPath : logoPath ? getPublicUrl(logoPath) : null,
+      logoUrl: logoPath ? resolveFileUrl(logoPath) || null : null,
     };
   }
 }

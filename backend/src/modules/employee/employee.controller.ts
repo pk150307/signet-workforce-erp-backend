@@ -90,11 +90,9 @@ export class EmployeeController {
     const employeeId = paramId(req);
     const documentId = paramId(req, 'documentId');
     const file = await employeeService.downloadDocument(employeeId, documentId);
-    if (file.isRemote) {
-      res.redirect(file.filePath);
-      return;
-    }
-    res.download(file.filePath, file.fileName, { headers: { 'Content-Type': file.mimeType } });
+    const inline = req.query.inline === 'true' || req.query.inline === '1';
+    const { sendDocumentDownload } = await import('../documents/document-download');
+    await sendDocumentDownload(res, file, { inline });
   }
 
   async create(req: Request, res: Response): Promise<void> {

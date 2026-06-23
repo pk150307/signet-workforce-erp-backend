@@ -1,6 +1,7 @@
 import { authRepository } from './auth.repository';
 import { LoginResult, ChangePasswordInput } from './auth.types';
 import { UnauthorizedError } from '../../common/errors';
+import { resolveFileUrl } from '../documents/upload.config';
 import { generateAccessToken, getRefreshTokenExpiryDate, getTokenExpiryDate } from '../../utils/jwt';
 import { generateRefreshToken, hashPassword, verifyPassword } from '../../utils/password';
 
@@ -23,7 +24,7 @@ export class AuthService {
       userName: user.username,
       email: user.email,
       fullName: user.full_name,
-      profilePhotoUrl: user.profile_photo_url,
+      profilePhotoUrl: resolveFileUrl(user.profile_photo_url) || null,
       roles,
       permissions,
     };

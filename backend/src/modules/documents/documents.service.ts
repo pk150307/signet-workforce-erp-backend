@@ -1,6 +1,6 @@
 import { documentsRepository } from './documents.repository';
 import { DocumentType, UploadDocumentInput, UploadDocumentResult } from './documents.types';
-import { getUploadedFileUrl, UploadedFile } from './upload.config';
+import { getStoredFileReference, getUploadedFileUrl, UploadedFile } from './upload.config';
 import { NotFoundError } from '../../common/errors';
 
 export class DocumentsService {
@@ -12,6 +12,7 @@ export class DocumentsService {
       input.entityId &&
       (isPhotoField || input.documentType === DocumentType.ProfilePhoto);
 
+    const fileRef = getStoredFileReference(file);
     const url = getUploadedFileUrl(file);
 
     if (isEmployeePhoto && input.entityId) {
@@ -19,7 +20,7 @@ export class DocumentsService {
       if (!exists) {
         throw new NotFoundError('Employee', input.entityId);
       }
-      await documentsRepository.updateEmployeePhoto(input.entityId, url, input.createdBy);
+      await documentsRepository.updateEmployeePhoto(input.entityId, fileRef, input.createdBy);
     }
 
     const id = await documentsRepository.createDocument({
@@ -27,7 +28,7 @@ export class DocumentsService {
       entityId: input.entityId,
       documentType: input.documentType,
       fileName: file.originalname,
-      filePath: url,
+      filePath: fileRef,
       mimeType: file.mimetype,
       fileSize: file.size,
       createdBy: input.createdBy,

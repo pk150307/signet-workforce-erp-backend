@@ -12,7 +12,7 @@ import { AppError, NotFoundError } from '../../common/errors';
 import { assertOrgHierarchyForClient } from '../../utils/organization';
 import { EmployeeLifecycleStatus } from './employee.constants';
 import { siteRepository } from '../site/site.repository';
-import { getUploadedFileUrl, UploadedFile } from '../documents/upload.config';
+import { getStoredFileReference, UploadedFile } from '../documents/upload.config';
 
 export class EmployeeService {
   private async validateClientSite(clientId?: string, siteId?: string): Promise<void> {
@@ -162,8 +162,8 @@ export class EmployeeService {
 
   async uploadPhoto(employeeId: string, file: Express.Multer.File, uploadedBy: string) {
     await this.getById(employeeId);
-    const url = getUploadedFileUrl(file as UploadedFile);
-    return employeeRepository.updatePhoto(employeeId, url, uploadedBy);
+    const photoRef = getStoredFileReference(file as UploadedFile);
+    return employeeRepository.updatePhoto(employeeId, photoRef, uploadedBy);
   }
 
   async getProfile(id: string) {
@@ -208,11 +208,11 @@ export class EmployeeService {
   }
 
   async downloadDocument(employeeId: string, documentId: string) {
-    const file = await employeeRepository.getDocumentFilePath(employeeId, documentId);
+    const file = await employeeRepository.getDocumentDownloadInfo(employeeId, documentId);
     if (!file) {
       throw new NotFoundError('Document', documentId);
     }
-    if (!file.isRemote && !employeeRepository.documentExistsOnDisk(file.filePath)) {
+    if (file.source === 'disk' && file.diskPath && !employeeRepository.documentExistsOnDisk(file.diskPath)) {
       throw new NotFoundError('Document', documentId);
     }
     return file;

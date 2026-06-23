@@ -7,6 +7,7 @@ import {
   BulkImportRow,
   CreateEmployeeInput,
   CreateEmployeeResult,
+  DocumentDownloadInfo,
   EmployeeActivity,
   EmployeeDashboardStats,
   EmployeeDetail,
@@ -37,7 +38,15 @@ import {
 } from '../../utils/organization';
 import { formatDate, formatDateTime, toNumber } from '../../utils/formatters';
 import { nextEmployeeCode } from '../../utils/next-code';
-import { getPublicUrl, getUploadedFileUrl, isRemoteFilePath, uploadRoot, UploadedFile } from '../documents/upload.config';
+import {
+  getStoredFileReference,
+  getUploadedFileUrl,
+  isRemoteFilePath,
+  resolveFileUrl,
+  uploadRoot,
+  UploadedFile,
+} from '../documents/upload.config';
+import { resolveS3Key } from '../../config/s3';
 import { designationGradeRepository } from '../designation-grade/designation-grade.repository';
 import { computeGradeGross } from '../designation-grade/designation-grade.types';
 
@@ -225,7 +234,7 @@ export class EmployeeRepository {
       siteName: r.site_name ? String(r.site_name) : null,
       status: Number(r.status) as EmployeeLifecycleStatus,
       joiningDate: formatDate(String(r.joining_date))!,
-      profilePhotoUrl: r.profile_photo_url ? String(r.profile_photo_url) : null,
+      profilePhotoUrl: resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
     };
   }
 
@@ -240,7 +249,7 @@ export class EmployeeRepository {
       alternatePhone: r.alternate_phone ? String(r.alternate_phone) : null,
       dateOfBirth: formatDate(String(r.date_of_birth))!,
       gender: Number(r.gender),
-      profilePhotoUrl: r.profile_photo_url ? String(r.profile_photo_url) : null,
+      profilePhotoUrl: resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
       joiningDate: formatDate(String(r.joining_date))!,
       confirmationDate: formatDate(r.confirmation_date as string | null),
       resignationDate: formatDate(r.resignation_date as string | null),
@@ -1238,20 +1247,20 @@ export class EmployeeRepository {
     });
   }
 
-  async updatePhoto(employeeId: string, photoUrl: string, updatedBy: string): Promise<{ url: string; profilePhotoUrl: string }> {
-    const url = getPublicUrl(photoUrl);
+  async updatePhoto(employeeId: string, photoRef: string, updatedBy: string): Promise<{ url: string; profilePhotoUrl: string }> {
+    const publicUrl = resolveFileUrl(photoRef);
     await withTransaction(async (client) => {
       await client.query(
         `UPDATE employees SET profile_photo_url = $2, updated_at = NOW(), updated_by = $3 WHERE id = $1`,
-        [employeeId, url, updatedBy],
+        [employeeId, photoRef, updatedBy],
       );
       await client.query(
         `UPDATE employee_personal_details SET profile_photo_url = $2, updated_at = NOW(), updated_by = $3
          WHERE employee_id = $1`,
-        [employeeId, url, updatedBy],
+        [employeeId, photoRef, updatedBy],
       );
     });
-    return { url, profilePhotoUrl: url };
+    return { url: publicUrl, profilePhotoUrl: publicUrl };
   }
 
   async getProfile(employeeId: string): Promise<EmployeeProfile | null> {
@@ -1361,7 +1370,7 @@ export class EmployeeRepository {
       type: String(r.document_type) as EmployeeDocumentItem['type'],
       label: String(r.label),
       fileName: String(r.file_name),
-      fileUrl: getPublicUrl(String(r.file_path)),
+      fileUrl: resolveFileUrl(String(r.file_path)),
       mimeType: String(r.mime_type),
       version: Number(r.version),
       uploadedAt: formatDateTime(r.uploaded_at as Date)!,
@@ -1375,6 +1384,7 @@ export class EmployeeRepository {
     file: Express.Multer.File,
     uploadedBy: string,
   ): Promise<EmployeeDocumentItem> {
+    const fileRef = getStoredFileReference(file as UploadedFile);
     const url = getUploadedFileUrl(file as UploadedFile);
 
     return withTransaction(async (client) => {
@@ -1406,7 +1416,7 @@ export class EmployeeRepository {
           type,
           label,
           file.originalname,
-          url,
+          fileRef,
           file.mimetype,
           file.size,
           version,
@@ -1416,10 +1426,10 @@ export class EmployeeRepository {
       );
 
       if (type === 'profile_photo') {
-        await client.query(`UPDATE employees SET profile_photo_url = $2 WHERE id = $1`, [employeeId, url]);
+        await client.query(`UPDATE employees SET profile_photo_url = $2 WHERE id = $1`, [employeeId, fileRef]);
         await client.query(
           `UPDATE employee_personal_details SET profile_photo_url = $2 WHERE employee_id = $1`,
-          [employeeId, url],
+          [employeeId, fileRef],
         );
       }
 
@@ -1469,23 +1479,45 @@ export class EmployeeRepository {
     });
   }
 
-  async getDocumentFilePath(
+  async getDocumentDownloadInfo(
     employeeId: string,
     documentId: string,
-  ): Promise<{ filePath: string; fileName: string; mimeType: string; isRemote: boolean } | null> {
+  ): Promise<DocumentDownloadInfo | null> {
     const { rows } = await query<{ file_path: string; file_name: string; mime_type: string }>(
       `SELECT file_path, file_name, mime_type FROM employee_documents
        WHERE id = $1 AND employee_id = $2 AND NOT is_deleted`,
       [documentId, employeeId],
     );
     if (!rows[0]) return null;
+
     const stored = rows[0].file_path;
-    const isRemote = isRemoteFilePath(stored);
+    const fileName = rows[0].file_name;
+    const mimeType = rows[0].mime_type;
+
+    const s3Key = resolveS3Key(stored);
+    if (s3Key) {
+      return {
+        source: 's3',
+        s3Key,
+        fileName,
+        mimeType,
+      };
+    }
+
+    if (isRemoteFilePath(stored)) {
+      return {
+        source: 'url',
+        url: stored,
+        fileName,
+        mimeType,
+      };
+    }
+
     return {
-      filePath: isRemote ? stored : path.join(uploadRoot, stored),
-      fileName: rows[0].file_name,
-      mimeType: rows[0].mime_type,
-      isRemote,
+      source: 'disk',
+      diskPath: path.join(uploadRoot, stored),
+      fileName,
+      mimeType,
     };
   }
 
