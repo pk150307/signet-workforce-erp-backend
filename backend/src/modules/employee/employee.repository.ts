@@ -1,4 +1,5 @@
 import { PoolClient } from 'pg';
+import path from 'path';
 import fs from 'fs';
 import { query, withTransaction } from '../../database/pool';
 import {
@@ -40,9 +41,12 @@ import { nextEmployeeCode } from '../../utils/next-code';
 import {
   getStoredFileReference,
   getUploadedFileUrl,
+  isRemoteFilePath,
   resolveFileUrl,
+  uploadRoot,
   UploadedFile,
 } from '../documents/upload.config';
+import { resolveS3Key } from '../../config/s3';
 import { designationGradeRepository } from '../designation-grade/designation-grade.repository';
 import { computeGradeGross } from '../designation-grade/designation-grade.types';
 
@@ -1486,10 +1490,34 @@ export class EmployeeRepository {
     );
     if (!rows[0]) return null;
 
+    const stored = rows[0].file_path;
+    const fileName = rows[0].file_name;
+    const mimeType = rows[0].mime_type;
+
+    const s3Key = resolveS3Key(stored);
+    if (s3Key) {
+      return {
+        source: 's3',
+        s3Key,
+        fileName,
+        mimeType,
+      };
+    }
+
+    if (isRemoteFilePath(stored)) {
+      return {
+        source: 'url',
+        url: stored,
+        fileName,
+        mimeType,
+      };
+    }
+
     return {
-      stored: rows[0].file_path,
-      fileName: rows[0].file_name,
-      mimeType: rows[0].mime_type,
+      source: 'disk',
+      diskPath: path.join(uploadRoot, stored),
+      fileName,
+      mimeType,
     };
   }
 

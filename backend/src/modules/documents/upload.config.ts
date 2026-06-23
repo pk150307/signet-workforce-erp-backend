@@ -1,16 +1,32 @@
 import path from 'path';
+import fs from 'fs';
 import type { Request } from 'express';
 import multer from 'multer';
 import multerS3 from 'multer-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../config';
-import { bucket, getS3Client, resolveS3Key } from '../../config/s3';
 import {
-  getActiveStorageBackend,
-  normalizeStorageKey,
-  resolveDiskPath,
-  uploadRoot,
-} from './storage.service';
+  bucket,
+  getS3Client,
+  getStorageBackend,
+  isS3Configured,
+  resolveS3Key,
+} from '../../config/s3';
+
+const uploadRoot = path.isAbsolute(config.uploadPath)
+  ? config.uploadPath
+  : path.resolve(process.cwd(), config.uploadPath);
+
+const subdirs = ['employees', 'documents', 'payslips', 'offer-letters', 'experience-letters'];
+
+if (!isS3Configured) {
+  for (const dir of subdirs) {
+    const fullPath = path.join(uploadRoot, dir);
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+    }
+  }
+}
 
 export type UploadedFile = Express.Multer.File & {
   location?: string;
@@ -46,7 +62,7 @@ function createS3Storage(category: string) {
 }
 
 function createStorage(category: string) {
-  return getActiveStorageBackend() === 's3' ? createS3Storage(category) : createDiskStorage(category);
+  return isS3Configured ? createS3Storage(category) : createDiskStorage(category);
 }
 
 function resolveUploadCategory(req: Request, file: Express.Multer.File): string {
@@ -89,25 +105,24 @@ export const documentUpload = multer({
 
 /** Accepts either `photo` (employee images) or `file` (general documents). */
 export const upload = multer({
-  storage:
-    getActiveStorageBackend() === 's3'
-      ? multerS3({
-          s3: getS3Client(),
-          bucket,
-          ...(process.env.S3_OBJECT_ACL ? { acl: process.env.S3_OBJECT_ACL } : {}),
-          contentType: multerS3.AUTO_CONTENT_TYPE,
-          key: (req, file, cb) => {
-            cb(null, s3ObjectKey(resolveUploadCategory(req, file), file.originalname));
-          },
-        })
-      : multer.diskStorage({
-          destination: (req, file, cb) => {
-            cb(null, path.join(uploadRoot, resolveUploadCategory(req, file)));
-          },
-          filename: (_req, file, cb) => {
-            cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
-          },
-        }),
+  storage: isS3Configured
+    ? multerS3({
+        s3: getS3Client(),
+        bucket,
+        ...(process.env.S3_OBJECT_ACL ? { acl: process.env.S3_OBJECT_ACL } : {}),
+        contentType: multerS3.AUTO_CONTENT_TYPE,
+        key: (req, file, cb) => {
+          cb(null, s3ObjectKey(resolveUploadCategory(req, file), file.originalname));
+        },
+      })
+    : multer.diskStorage({
+        destination: (req, file, cb) => {
+          cb(null, path.join(uploadRoot, resolveUploadCategory(req, file)));
+        },
+        filename: (_req, file, cb) => {
+          cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+        },
+      }),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: documentFilter,
 });
@@ -145,12 +160,13 @@ export function resolveFileUrl(stored: string | null | undefined): string {
     return '';
   }
   if (isRemoteFilePath(stored)) {
+    // Private S3 URLs are not directly accessible — clients must use the download API.
     if (resolveS3Key(stored)) {
       return '';
     }
     return stored;
   }
-  if (getActiveStorageBackend() === 's3') {
+  if (isS3Configured) {
     return '';
   }
   return getPublicUrl(stored);
@@ -160,20 +176,8 @@ export function isRemoteFilePath(filePath: string): boolean {
   return filePath.startsWith('http://') || filePath.startsWith('https://');
 }
 
-export function extractStoredRelativePath(stored: string): string {
-  return normalizeStorageKey(stored);
-}
-
-export function findDiskPath(relativePath: string): string | null {
-  return resolveDiskPath(relativePath);
-}
-
 export function isS3ObjectKey(stored: string): boolean {
   return Boolean(resolveS3Key(stored));
 }
 
-export function getStorageBackend(): 's3' | 'disk' {
-  return getActiveStorageBackend();
-}
-
-export { uploadRoot };
+export { uploadRoot, getStorageBackend };
