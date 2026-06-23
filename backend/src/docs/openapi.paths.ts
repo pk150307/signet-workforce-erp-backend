@@ -107,7 +107,7 @@
  *         aadhaarNumber: { type: string }
  *     CreateClientBody:
  *       type: object
- *       required: [companyName, contactPerson, email, phone, address, city, state]
+ *       required: [companyName]
  *       properties:
  *         companyName: { type: string, example: "Brigade Enterprises Ltd." }
  *         contactPerson: { type: string, example: "Rajesh Kumar" }
