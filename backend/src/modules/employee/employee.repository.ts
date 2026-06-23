@@ -37,7 +37,7 @@ import {
 } from '../../utils/organization';
 import { formatDate, formatDateTime, toNumber } from '../../utils/formatters';
 import { nextEmployeeCode } from '../../utils/next-code';
-import { getPublicUrl, uploadRoot } from '../documents/upload.config';
+import { getPublicUrl, getUploadedFileUrl, isRemoteFilePath, uploadRoot, UploadedFile } from '../documents/upload.config';
 import { designationGradeRepository } from '../designation-grade/designation-grade.repository';
 import { computeGradeGross } from '../designation-grade/designation-grade.types';
 
@@ -1238,8 +1238,8 @@ export class EmployeeRepository {
     });
   }
 
-  async updatePhoto(employeeId: string, relativePath: string, updatedBy: string): Promise<{ url: string; profilePhotoUrl: string }> {
-    const url = getPublicUrl(relativePath);
+  async updatePhoto(employeeId: string, photoUrl: string, updatedBy: string): Promise<{ url: string; profilePhotoUrl: string }> {
+    const url = getPublicUrl(photoUrl);
     await withTransaction(async (client) => {
       await client.query(
         `UPDATE employees SET profile_photo_url = $2, updated_at = NOW(), updated_by = $3 WHERE id = $1`,
@@ -1375,7 +1375,7 @@ export class EmployeeRepository {
     file: Express.Multer.File,
     uploadedBy: string,
   ): Promise<EmployeeDocumentItem> {
-    const relativePath = `documents/${file.filename}`;
+    const url = getUploadedFileUrl(file as UploadedFile);
 
     return withTransaction(async (client) => {
       const { rows: existing } = await client.query<{ id: string; version: number }>(
@@ -1406,7 +1406,7 @@ export class EmployeeRepository {
           type,
           label,
           file.originalname,
-          relativePath,
+          url,
           file.mimetype,
           file.size,
           version,
@@ -1416,7 +1416,6 @@ export class EmployeeRepository {
       );
 
       if (type === 'profile_photo') {
-        const url = getPublicUrl(relativePath);
         await client.query(`UPDATE employees SET profile_photo_url = $2 WHERE id = $1`, [employeeId, url]);
         await client.query(
           `UPDATE employee_personal_details SET profile_photo_url = $2 WHERE employee_id = $1`,
@@ -1439,7 +1438,7 @@ export class EmployeeRepository {
         type: type as EmployeeDocumentItem['type'],
         label,
         fileName: file.originalname,
-        fileUrl: getPublicUrl(relativePath),
+        fileUrl: url,
         mimeType: file.mimetype,
         version,
         uploadedAt: formatDateTime(new Date())!,
@@ -1470,17 +1469,23 @@ export class EmployeeRepository {
     });
   }
 
-  async getDocumentFilePath(employeeId: string, documentId: string): Promise<{ filePath: string; fileName: string; mimeType: string } | null> {
+  async getDocumentFilePath(
+    employeeId: string,
+    documentId: string,
+  ): Promise<{ filePath: string; fileName: string; mimeType: string; isRemote: boolean } | null> {
     const { rows } = await query<{ file_path: string; file_name: string; mime_type: string }>(
       `SELECT file_path, file_name, mime_type FROM employee_documents
        WHERE id = $1 AND employee_id = $2 AND NOT is_deleted`,
       [documentId, employeeId],
     );
     if (!rows[0]) return null;
+    const stored = rows[0].file_path;
+    const isRemote = isRemoteFilePath(stored);
     return {
-      filePath: path.join(uploadRoot, rows[0].file_path),
+      filePath: isRemote ? stored : path.join(uploadRoot, stored),
       fileName: rows[0].file_name,
       mimeType: rows[0].mime_type,
+      isRemote,
     };
   }
 

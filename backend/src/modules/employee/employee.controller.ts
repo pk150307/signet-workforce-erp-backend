@@ -90,6 +90,10 @@ export class EmployeeController {
     const employeeId = paramId(req);
     const documentId = paramId(req, 'documentId');
     const file = await employeeService.downloadDocument(employeeId, documentId);
+    if (file.isRemote) {
+      res.redirect(file.filePath);
+      return;
+    }
     res.download(file.filePath, file.fileName, { headers: { 'Content-Type': file.mimeType } });
   }
 
