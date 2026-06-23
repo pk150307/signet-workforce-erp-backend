@@ -76,8 +76,19 @@ export function createApp(): express.Application {
 
   app.get('/health', async (_req, res) => {
     const { checkDatabaseConnection } = await import('./database/pool');
+    const { getStorageDiagnostics } = await import('./config/s3');
     const dbOk = await checkDatabaseConnection();
-    res.status(dbOk ? 200 : 503).json({ status: dbOk ? 'healthy' : 'unhealthy', database: dbOk });
+    const storage = getStorageDiagnostics();
+    res.status(dbOk ? 200 : 503).json({
+      status: dbOk ? 'healthy' : 'unhealthy',
+      database: dbOk,
+      storage: {
+        backend: storage.backend,
+        bucket: storage.bucket,
+        region: storage.region,
+        ...(storage.missingEnv.length > 0 ? { missingEnv: storage.missingEnv } : {}),
+      },
+    });
   });
 
   app.get('/', (_req, res) => {
