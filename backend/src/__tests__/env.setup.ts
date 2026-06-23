@@ -10,3 +10,7 @@ process.env.DB_PASSWORD = process.env.DB_PASSWORD ?? 'Piyush060197';
 process.env.UPLOAD_PATH = process.env.UPLOAD_PATH ?? '../uploads';
 process.env.PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? 'http://localhost:5000/uploads';
 process.env.LOG_LEVEL = 'error';
+process.env.AWS_REGION = '';
+process.env.AWS_ACCESS_KEY_ID = '';
+process.env.AWS_SECRET_ACCESS_KEY = '';
+process.env.AWS_BUCKET_NAME = '';
