@@ -8,6 +8,7 @@ import {
   EmploymentType,
 } from './employee.constants';
 import { BulkImportRow } from './employee.types';
+import { sendDocumentDownload } from '../documents/document-download';
 
 function parseEmployeeStatusQuery(
   value: unknown,
@@ -91,7 +92,6 @@ export class EmployeeController {
     const documentId = paramId(req, 'documentId');
     const file = await employeeService.downloadDocument(employeeId, documentId);
     const inline = req.query.inline === 'true' || req.query.inline === '1';
-    const { sendDocumentDownload } = await import('../documents/document-download');
     await sendDocumentDownload(res, file, { inline });
   }
 
