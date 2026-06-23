@@ -1,4 +1,11 @@
 /** PM2 process manager config — run from backend/: pm2 start ecosystem.config.cjs */
+const path = require('path');
+
+const envFiles = [
+  path.join(__dirname, '.env'),
+  path.join(__dirname, '..', '.env'),
+];
+
 module.exports = {
   apps: [
     {
@@ -15,8 +22,10 @@ module.exports = {
       error_file: './logs/pm2-error.log',
       out_file: './logs/pm2-out.log',
       merge_logs: true,
+      node_args: '-r dotenv/config',
       env: {
         NODE_ENV: 'production',
+        DOTENV_CONFIG_PATH: envFiles.find((file) => require('fs').existsSync(file)) ?? envFiles[0],
       },
     },
   ],
