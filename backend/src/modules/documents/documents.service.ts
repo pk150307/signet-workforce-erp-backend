@@ -1,19 +1,18 @@
 import { documentsRepository } from './documents.repository';
 import { DocumentType, UploadDocumentInput, UploadDocumentResult } from './documents.types';
-import { getPublicUrl } from './upload.config';
+import { getUploadedFileUrl, UploadedFile } from './upload.config';
 import { NotFoundError } from '../../common/errors';
 
 export class DocumentsService {
   async upload(input: UploadDocumentInput): Promise<UploadDocumentResult> {
-    const isPhotoField = input.file.fieldname === 'photo';
+    const file = input.file as UploadedFile;
+    const isPhotoField = file.fieldname === 'photo';
     const isEmployeePhoto =
       input.entityType === 'employee' &&
       input.entityId &&
       (isPhotoField || input.documentType === DocumentType.ProfilePhoto);
 
-    const category = isPhotoField || isEmployeePhoto ? 'employees' : 'documents';
-    const relativePath = `${category}/${input.file.filename}`;
-    const url = getPublicUrl(relativePath);
+    const url = getUploadedFileUrl(file);
 
     if (isEmployeePhoto && input.entityId) {
       const exists = await documentsRepository.employeeExists(input.entityId);
@@ -27,14 +26,14 @@ export class DocumentsService {
       entityType: input.entityType,
       entityId: input.entityId,
       documentType: input.documentType,
-      fileName: input.file.originalname,
-      filePath: relativePath,
-      mimeType: input.file.mimetype,
-      fileSize: input.file.size,
+      fileName: file.originalname,
+      filePath: url,
+      mimeType: file.mimetype,
+      fileSize: file.size,
       createdBy: input.createdBy,
     });
 
-    const result: UploadDocumentResult = { id, url, fileName: input.file.originalname };
+    const result: UploadDocumentResult = { id, url, fileName: file.originalname };
     if (isEmployeePhoto) {
       result.profilePhotoUrl = url;
     }
