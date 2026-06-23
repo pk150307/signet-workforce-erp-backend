@@ -7,7 +7,7 @@
     "openapi:generate": "tsx src/scripts/generate-openapi.ts",
     "predev": "node scripts/check-node-version.cjs && tsx src/scripts/check-env.ts",
     "build": "npm run openapi:generate && tsc",
-    "start": "node dist/server.js",
+    "start": "node -r dotenv/config dist/server.js",
     "dev": "npm run openapi:generate && tsx watch src/server.ts",
     "migrate": "tsx src/database/migrate.ts",
     "seed": "tsx src/database/seed.ts",
