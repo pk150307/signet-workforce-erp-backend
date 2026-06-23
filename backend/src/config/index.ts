@@ -10,6 +10,14 @@ for (const envPath of [
   dotenv.config({ path: envPath });
 }
 
+// 👇 ADD THESE LINES HERE
+console.log('========== AWS ENV ==========');
+console.log('AWS_REGION:', process.env.AWS_REGION);
+console.log('AWS_BUCKET_NAME:', process.env.AWS_BUCKET_NAME);
+console.log('AWS_ACCESS_KEY_ID exists:', !!process.env.AWS_ACCESS_KEY_ID);
+console.log('AWS_SECRET_ACCESS_KEY exists:', !!process.env.AWS_SECRET_ACCESS_KEY);
+console.log('=============================');
+
 function required(name: string, fallback?: string): string {
   const value = process.env[name] ?? fallback;
   if (!value) {
