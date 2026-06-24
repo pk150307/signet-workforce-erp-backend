@@ -59,14 +59,23 @@ The API starts at **http://localhost:5000**.
 - Swagger UI: http://localhost:5000/swagger
 - Health check: http://localhost:5000/health
 
-### Default admin credentials
+### Default credentials
+
+**Super Admin**
 
 | Field | Value |
 |-------|-------|
 | Email | `sunil.kumar@signetcorporateservices.com` |
 | Password | `AdminSignet@123` |
 
-To reset the default admin on an existing database:
+**HR Manager**
+
+| Field | Value |
+|-------|-------|
+| Email | `contact@signetcorporateservices.com` |
+| Password | `hrSignet@123` |
+
+To reset the default accounts on an existing database:
 
 ```bash
 cd backend && npm run seed:auth
