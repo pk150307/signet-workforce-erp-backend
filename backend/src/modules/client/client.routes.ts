@@ -7,6 +7,7 @@ import {
   listClientsValidation,
   updateClientValidation,
 } from './client.validation';
+import { deleteWithReasonValidation } from '../delete-requests/delete-requests.validation';
 import { validate } from '../../common/response';
 import { authenticate } from '../../middleware/auth.middleware';
 
@@ -34,7 +35,7 @@ router.put('/:id', validate(updateClientValidation), (req, res, next) => {
   clientController.update(req, res).catch(next);
 });
 
-router.delete('/:id', validate(clientIdValidation), (req, res, next) => {
+router.delete('/:id', validate([...clientIdValidation, ...deleteWithReasonValidation]), (req, res, next) => {
   clientController.delete(req, res).catch(next);
 });
 

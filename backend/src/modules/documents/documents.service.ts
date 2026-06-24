@@ -1,7 +1,11 @@
 import { documentsRepository } from './documents.repository';
 import { DocumentType, UploadDocumentInput, UploadDocumentResult } from './documents.types';
-import { getStoredFileReference, getUploadedFileUrl, UploadedFile } from './upload.config';
+import { getUploadedFileKey, UploadedFile } from './upload.config';
 import { NotFoundError } from '../../common/errors';
+import {
+  createSignedDownloadUrl,
+  SignedDownloadResult,
+} from './signed-url.service';
 
 export class DocumentsService {
   async upload(input: UploadDocumentInput): Promise<UploadDocumentResult> {
@@ -12,15 +16,14 @@ export class DocumentsService {
       input.entityId &&
       (isPhotoField || input.documentType === DocumentType.ProfilePhoto);
 
-    const fileRef = getStoredFileReference(file);
-    const url = getUploadedFileUrl(file);
+    const fileKey = getUploadedFileKey(file);
 
     if (isEmployeePhoto && input.entityId) {
       const exists = await documentsRepository.employeeExists(input.entityId);
       if (!exists) {
         throw new NotFoundError('Employee', input.entityId);
       }
-      await documentsRepository.updateEmployeePhoto(input.entityId, fileRef, input.createdBy);
+      await documentsRepository.updateEmployeePhoto(input.entityId, fileKey, input.createdBy);
     }
 
     const id = await documentsRepository.createDocument({
@@ -28,17 +31,43 @@ export class DocumentsService {
       entityId: input.entityId,
       documentType: input.documentType,
       fileName: file.originalname,
-      filePath: fileRef,
+      filePath: fileKey,
       mimeType: file.mimetype,
       fileSize: file.size,
       createdBy: input.createdBy,
     });
 
-    const result: UploadDocumentResult = { id, url, fileName: file.originalname };
-    if (isEmployeePhoto) {
-      result.profilePhotoUrl = url;
+    const downloadUrl = `/api/documents/${id}/download`;
+    const result: UploadDocumentResult = {
+      id,
+      url: downloadUrl,
+      downloadUrl,
+      fileName: file.originalname,
+    };
+
+    if (isEmployeePhoto && input.entityId) {
+      result.profilePhotoUrl = `/api/employees/${input.entityId}/photo/download`;
     }
+
     return result;
+  }
+
+  async getSignedDownloadUrl(documentId: string, inline = false): Promise<SignedDownloadResult> {
+    const document = await documentsRepository.getDocument(documentId);
+    if (!document) {
+      throw new NotFoundError('Document', documentId);
+    }
+
+    const signed = await createSignedDownloadUrl(document.file_path, {
+      fileName: document.file_name,
+      inline,
+    });
+
+    if (!signed) {
+      throw new NotFoundError('Document file', documentId);
+    }
+
+    return signed;
   }
 }
 

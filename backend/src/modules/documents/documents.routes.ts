@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import { documentsController } from './documents.controller';
 import { upload } from './upload.config';
 import { authenticate } from '../../middleware/auth.middleware';
@@ -23,6 +23,14 @@ router.post(
     const files = req.files as Record<string, Express.Multer.File[]> | undefined;
     req.file = files?.photo?.[0] ?? files?.file?.[0] ?? req.file;
     documentsController.upload(req, res).catch(next);
+  },
+);
+
+router.get(
+  '/:id/download',
+  validate([param('id').isUUID().withMessage('Valid document ID is required')]),
+  (req, res, next) => {
+    documentsController.download(req, res).catch(next);
   },
 );
 

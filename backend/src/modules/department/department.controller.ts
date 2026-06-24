@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
-import { sendCreated, sendNoContent, sendSuccess } from '../../common/response';
+import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import {
+  sendDeleteActionResult,
+  toDeleteActionContext,
+} from '../delete-requests/delete-action.util';
 import { departmentService } from './department.service';
 import { CreateDepartmentInput, UpdateDepartmentInput } from './department.types';
 
@@ -48,8 +52,11 @@ export class DepartmentController {
   }
 
   async delete(req: Request, res: Response): Promise<void> {
-    await departmentService.delete(paramId(req), req.user?.username ?? 'System');
-    sendNoContent(res);
+    const result = await departmentService.delete(
+      paramId(req),
+      toDeleteActionContext(req.user, req.body?.reason),
+    );
+    sendDeleteActionResult(res, result);
   }
 }
 

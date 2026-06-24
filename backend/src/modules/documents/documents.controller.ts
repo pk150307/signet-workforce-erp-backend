@@ -2,7 +2,9 @@ import { Request, Response } from 'express';
 import { documentsService } from './documents.service';
 import { DocumentType } from './documents.types';
 import { sendSuccess } from '../../common/response';
-import { AppError } from '../../common/errors';
+import { AppError, NotFoundError } from '../../common/errors';
+import { respondWithFileDownload } from './document-download';
+import { documentsRepository } from './documents.repository';
 
 export class DocumentsController {
   async upload(req: Request, res: Response): Promise<void> {
@@ -24,6 +26,26 @@ export class DocumentsController {
     });
 
     sendSuccess(res, result);
+  }
+
+  async download(req: Request, res: Response): Promise<void> {
+    const documentId = String(req.params.id);
+    const document = await documentsRepository.getDocument(documentId);
+    if (!document) {
+      throw new NotFoundError('Document', documentId);
+    }
+
+    const inline = req.query.inline === 'true' || req.query.inline === '1';
+    await respondWithFileDownload(
+      req,
+      res,
+      document.file_path,
+      {
+        fileName: document.file_name,
+        mimeType: document.mime_type ?? 'application/octet-stream',
+      },
+      { inline },
+    );
   }
 }
 

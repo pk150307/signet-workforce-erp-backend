@@ -2,6 +2,9 @@ import { clientRepository } from './client.repository';
 import { ClientFilter, CreateClientInput, UpdateClientInput } from './client.types';
 import { NotFoundError } from '../../common/errors';
 import { siteRepository } from '../site/site.repository';
+import { deleteApprovalService } from '../delete-requests/delete-requests.service';
+import { DeleteActionContext, DeleteActionResult } from '../delete-requests/delete-requests.types';
+import { IAM_MODULES } from '../iam/iam.constants';
 
 export class ClientService {
   list(filter: ClientFilter) {
@@ -25,9 +28,22 @@ export class ClientService {
     return clientRepository.findById(input.id);
   }
 
-  async delete(id: string, deletedBy: string) {
-    const deleted = await clientRepository.softDelete(id, deletedBy);
-    if (!deleted) throw new NotFoundError('Client', id);
+  async delete(id: string, context: DeleteActionContext): Promise<DeleteActionResult> {
+    const client = await clientRepository.findById(id);
+    if (!client) throw new NotFoundError('Client', id);
+
+    return deleteApprovalService.handleDelete({
+      module: IAM_MODULES.CLIENTS,
+      entityType: IAM_MODULES.CLIENTS,
+      entityId: id,
+      entityLabel: client.companyName,
+      entitySnapshot: {
+        id: client.id,
+        clientCode: client.clientCode,
+        companyName: client.companyName,
+      },
+      context,
+    });
   }
 
   listSites(clientId: string, page: number, pageSize: number) {

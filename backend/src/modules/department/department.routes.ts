@@ -9,6 +9,7 @@ import {
   nextDepartmentCodeValidation,
   updateDepartmentValidation,
 } from './department.validation';
+import { deleteWithReasonValidation } from '../delete-requests/delete-requests.validation';
 
 const router = Router();
 
@@ -34,7 +35,7 @@ router.put('/:id', validate(updateDepartmentValidation), (req, res, next) => {
   departmentController.update(req, res).catch(next);
 });
 
-router.delete('/:id', validate(departmentIdValidation), (req, res, next) => {
+router.delete('/:id', validate([...departmentIdValidation, ...deleteWithReasonValidation]), (req, res, next) => {
   departmentController.delete(req, res).catch(next);
 });
 

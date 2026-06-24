@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
-import { sendCreated, sendNoContent, sendSuccess } from '../../common/response';
+import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import {
+  sendDeleteActionResult,
+  toDeleteActionContext,
+} from '../delete-requests/delete-action.util';
 import { designationService } from './designation.service';
 import { CreateDesignationInput, UpdateDesignationInput } from './designation.types';
 
@@ -51,8 +55,11 @@ export class DesignationController {
   }
 
   async delete(req: Request, res: Response): Promise<void> {
-    await designationService.delete(paramId(req), req.user?.username ?? 'System');
-    sendNoContent(res);
+    const result = await designationService.delete(
+      paramId(req),
+      toDeleteActionContext(req.user, req.body?.reason),
+    );
+    sendDeleteActionResult(res, result);
   }
 }
 

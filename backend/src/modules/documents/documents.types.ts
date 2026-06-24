@@ -18,6 +18,27 @@ export interface UploadDocumentInput {
 export interface UploadDocumentResult {
   id: string;
   url: string;
+  downloadUrl: string;
   fileName: string;
   profilePhotoUrl?: string;
+}
+
+export interface SignedDownloadResponse {
+  url: string;
+  fileName?: string;
+  expiresInSeconds: number;
+  source: 's3' | 'disk';
+}
+
+export interface StoredDocumentRow {
+  id: string;
+  entity_type: string;
+  entity_id: string | null;
+  document_type: number;
+  file_name: string;
+  file_path: string;
+  mime_type: string | null;
+  file_size: number | null;
+  created_at: Date;
+  created_by: string;
 }

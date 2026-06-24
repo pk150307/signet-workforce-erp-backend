@@ -1,14 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import { HeadBucketCommand, GetObjectCommand, S3ServiceException } from '@aws-sdk/client-s3';
+import { GetObjectCommand, S3ServiceException } from '@aws-sdk/client-s3';
 import { config } from '../../config';
 import {
   bucket,
+  describeS3AccessError,
   getS3Client,
   getStorageBackend,
   isS3Configured,
   resolveS3Key,
   StorageBackend,
+  verifyS3Access,
 } from '../../config/s3';
 import { logger } from '../../utils/logger';
 
@@ -109,10 +111,6 @@ export function resolveDiskPath(key: string): string | null {
   return null;
 }
 
-async function verifyS3Access(): Promise<void> {
-  await getS3Client().send(new HeadBucketCommand({ Bucket: bucket }));
-}
-
 async function readFromS3(key: string): Promise<StoredFileContent | null> {
   try {
     const response = await getS3Client().send(
@@ -131,8 +129,13 @@ async function readFromS3(key: string): Promise<StoredFileContent | null> {
       contentType: response.ContentType ?? 'application/octet-stream',
     };
   } catch (error) {
-    if (error instanceof S3ServiceException && ['NoSuchKey', 'NotFound'].includes(error.name)) {
-      return null;
+    if (error instanceof S3ServiceException) {
+      if (['NoSuchKey', 'NotFound'].includes(error.name)) {
+        return null;
+      }
+      if (error.name === 'AccessDenied') {
+        throw error;
+      }
     }
     throw error;
   }
@@ -153,14 +156,44 @@ function readFromDisk(key: string): StoredFileContent | null {
 export async function readStoredFile(stored: string): Promise<StoredFileContent | null> {
   const key = normalizeStorageKey(stored);
 
-  if (getActiveStorageBackend() === 's3') {
-    const fromS3 = await readFromS3(key);
-    if (fromS3) {
-      return fromS3;
+  if (getActiveStorageBackend() === 's3' && isS3Configured) {
+    try {
+      const fromS3 = await readFromS3(key);
+      if (fromS3) {
+        return fromS3;
+      }
+    } catch (error) {
+      if (error instanceof S3ServiceException && error.name === 'AccessDenied') {
+        throw error;
+      }
+      logger.warn('S3 read failed, trying local disk fallback', {
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
-  return readFromDisk(stored);
+  const fromDisk = readFromDisk(stored);
+  if (fromDisk) {
+    return fromDisk;
+  }
+
+  // Legacy files uploaded to S3 before a disk fallback — try S3 when credentials work.
+  if (isS3Configured) {
+    try {
+      return await readFromS3(key);
+    } catch (error) {
+      if (error instanceof S3ServiceException && error.name === 'AccessDenied') {
+        throw error;
+      }
+      logger.warn('S3 legacy read failed', {
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return null;
 }
 
 export async function initializeStorage(): Promise<void> {
@@ -177,12 +210,11 @@ export async function initializeStorage(): Promise<void> {
     storageInitError = null;
     logger.info('File storage: S3', { bucket, region: config.aws.region });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    storageInitError = message;
+    storageInitError = describeS3AccessError(error);
 
     if (config.isProduction) {
       throw new Error(
-        `S3 storage is configured but not accessible (${message}). ` +
+        `S3 storage is configured but not accessible. ${storageInitError} ` +
           'Fix AWS credentials/permissions or unset AWS_* variables to use disk storage.',
       );
     }
@@ -190,8 +222,8 @@ export async function initializeStorage(): Promise<void> {
     activeBackend = 'disk';
     ensureDiskSubdirs();
     console.warn('[startup] ⚠️  S3 credentials are invalid or lack permissions — using local disk storage');
-    console.warn(`[startup]    ${message}`);
-    logger.warn('S3 unavailable, falling back to local disk storage', { error: message, uploadRoot });
+    console.warn(`[startup]    ${storageInitError}`);
+    logger.warn('S3 unavailable, falling back to local disk storage', { error: storageInitError, uploadRoot });
   }
 }
 

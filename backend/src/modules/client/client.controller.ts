@@ -1,8 +1,12 @@
 import { Request, Response } from 'express';
 import { clientService } from './client.service';
 import { CreateClientInput, UpdateClientInput } from './client.types';
-import { sendCreated, sendNoContent, sendSuccess } from '../../common/response';
+import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import {
+  sendDeleteActionResult,
+  toDeleteActionContext,
+} from '../delete-requests/delete-action.util';
 
 export class ClientController {
   async list(req: Request, res: Response): Promise<void> {
@@ -41,8 +45,11 @@ export class ClientController {
   }
 
   async delete(req: Request, res: Response): Promise<void> {
-    await clientService.delete(paramId(req), req.user?.username ?? 'System');
-    sendNoContent(res);
+    const result = await clientService.delete(
+      paramId(req),
+      toDeleteActionContext(req.user, req.body?.reason),
+    );
+    sendDeleteActionResult(res, result);
   }
 
   async listSites(req: Request, res: Response): Promise<void> {

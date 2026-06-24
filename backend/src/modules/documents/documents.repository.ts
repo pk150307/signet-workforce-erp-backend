@@ -1,4 +1,5 @@
 import { query } from '../../database/pool';
+import type { StoredDocumentRow } from './documents.types';
 
 export class DocumentsRepository {
   async createDocument(data: {
@@ -28,11 +29,22 @@ export class DocumentsRepository {
     return rows[0].id;
   }
 
-  async updateEmployeePhoto(employeeId: string, photoUrl: string, updatedBy: string): Promise<void> {
+  async getDocument(id: string): Promise<StoredDocumentRow | null> {
+    const { rows } = await query<StoredDocumentRow>(
+      `SELECT id, entity_type, entity_id, document_type, file_name, file_path,
+              mime_type, file_size, created_at, created_by
+       FROM documents
+       WHERE id = $1 AND NOT is_deleted`,
+      [id],
+    );
+    return rows[0] ?? null;
+  }
+
+  async updateEmployeePhoto(employeeId: string, photoKey: string, updatedBy: string): Promise<void> {
     await query(
       `UPDATE employees SET profile_photo_url = $2, updated_at = NOW(), updated_by = $3
        WHERE id = $1 AND NOT is_deleted`,
-      [employeeId, photoUrl, updatedBy],
+      [employeeId, photoKey, updatedBy],
     );
   }
 

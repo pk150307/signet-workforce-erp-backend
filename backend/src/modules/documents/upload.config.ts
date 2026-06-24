@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import type { Request } from 'express';
+import type { StorageEngine } from 'multer';
 import multer from 'multer';
 import multerS3 from 'multer-s3';
 import { v4 as uuidv4 } from 'uuid';
@@ -8,24 +9,23 @@ import { config } from '../../config';
 import {
   bucket,
   getS3Client,
-  getStorageBackend,
-  isS3Configured,
   resolveS3Key,
 } from '../../config/s3';
-
-const uploadRoot = path.isAbsolute(config.uploadPath)
-  ? config.uploadPath
-  : path.resolve(process.cwd(), config.uploadPath);
+import { getActiveStorageBackend, uploadRoot } from './storage.service';
 
 const subdirs = ['employees', 'documents', 'payslips', 'offer-letters', 'experience-letters'];
 
-if (!isS3Configured) {
+function ensureDiskSubdirs(): void {
   for (const dir of subdirs) {
     const fullPath = path.join(uploadRoot, dir);
     if (!fs.existsSync(fullPath)) {
       fs.mkdirSync(fullPath, { recursive: true });
     }
   }
+}
+
+if (getActiveStorageBackend() === 'disk') {
+  ensureDiskSubdirs();
 }
 
 export type UploadedFile = Express.Multer.File & {
@@ -38,9 +38,10 @@ function s3ObjectKey(category: string, originalname: string): string {
   return `${category}/${uuidv4()}${path.extname(originalname)}`;
 }
 
-function createDiskStorage(category: string) {
+function createDiskStorage(category: string): StorageEngine {
   return multer.diskStorage({
     destination: (_req, _file, cb) => {
+      ensureDiskSubdirs();
       cb(null, path.join(uploadRoot, category));
     },
     filename: (_req, file, cb) => {
@@ -49,7 +50,7 @@ function createDiskStorage(category: string) {
   });
 }
 
-function createS3Storage(category: string) {
+function createS3Storage(category: string): StorageEngine {
   return multerS3({
     s3: getS3Client(),
     bucket,
@@ -61,8 +62,24 @@ function createS3Storage(category: string) {
   });
 }
 
-function createStorage(category: string) {
-  return isS3Configured ? createS3Storage(category) : createDiskStorage(category);
+/** Pick S3 or disk at request time (after initializeStorage has run). */
+function deferredStorage(category: string): StorageEngine {
+  return {
+    _handleFile(req, file, cb) {
+      const storage =
+        getActiveStorageBackend() === 's3' ? createS3Storage(category) : createDiskStorage(category);
+      storage._handleFile(req, file, cb);
+    },
+    _removeFile(req, file, cb) {
+      const storage =
+        getActiveStorageBackend() === 's3' ? createS3Storage(category) : createDiskStorage(category);
+      if (storage._removeFile) {
+        storage._removeFile(req, file, cb);
+      } else {
+        cb(null);
+      }
+    },
+  };
 }
 
 function resolveUploadCategory(req: Request, file: Express.Multer.File): string {
@@ -92,37 +109,34 @@ const documentFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
 };
 
 export const photoUpload = multer({
-  storage: createStorage('employees'),
+  storage: deferredStorage('employees'),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: imageFilter,
 });
 
 export const documentUpload = multer({
-  storage: createStorage('documents'),
+  storage: deferredStorage('documents'),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: documentFilter,
 });
 
 /** Accepts either `photo` (employee images) or `file` (general documents). */
 export const upload = multer({
-  storage: isS3Configured
-    ? multerS3({
-        s3: getS3Client(),
-        bucket,
-        ...(process.env.S3_OBJECT_ACL ? { acl: process.env.S3_OBJECT_ACL } : {}),
-        contentType: multerS3.AUTO_CONTENT_TYPE,
-        key: (req, file, cb) => {
-          cb(null, s3ObjectKey(resolveUploadCategory(req, file), file.originalname));
-        },
-      })
-    : multer.diskStorage({
-        destination: (req, file, cb) => {
-          cb(null, path.join(uploadRoot, resolveUploadCategory(req, file)));
-        },
-        filename: (_req, file, cb) => {
-          cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
-        },
-      }),
+  storage: {
+    _handleFile(req, file, cb) {
+      const category = resolveUploadCategory(req, file);
+      deferredStorage(category)._handleFile(req, file, cb);
+    },
+    _removeFile(req, file, cb) {
+      const category = resolveUploadCategory(req, file);
+      const storage = deferredStorage(category);
+      if (storage._removeFile) {
+        storage._removeFile(req, file, cb);
+      } else {
+        cb(null);
+      }
+    },
+  },
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: documentFilter,
 });
@@ -145,7 +159,7 @@ export function getStoredFileReference(file: UploadedFile): string {
   return file.filename;
 }
 
-/** Public URL returned to clients after upload. */
+/** Public URL returned to clients after upload (disk only). */
 export function getUploadedFileUrl(file: UploadedFile): string {
   return resolveFileUrl(getStoredFileReference(file));
 }
@@ -160,13 +174,14 @@ export function resolveFileUrl(stored: string | null | undefined): string {
     return '';
   }
   if (isRemoteFilePath(stored)) {
-    // Private S3 URLs are not directly accessible — clients must use the download API.
-    if (resolveS3Key(stored)) {
+    if (resolveS3Key(stored) && getActiveStorageBackend() === 's3') {
       return '';
     }
-    return stored;
+    if (!resolveS3Key(stored)) {
+      return stored;
+    }
   }
-  if (isS3Configured) {
+  if (getActiveStorageBackend() === 's3') {
     return '';
   }
   return getPublicUrl(stored);
@@ -180,4 +195,4 @@ export function isS3ObjectKey(stored: string): boolean {
   return Boolean(resolveS3Key(stored));
 }
 
-export { uploadRoot, getStorageBackend };
+export { uploadRoot };
