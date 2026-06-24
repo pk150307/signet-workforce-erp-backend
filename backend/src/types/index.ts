@@ -28,6 +28,7 @@ export function createPaginatedResult<T>(
 
 export interface AuthenticatedUser {
   userId: string;
+  sessionId: string;
   username: string;
   email: string;
   fullName: string;

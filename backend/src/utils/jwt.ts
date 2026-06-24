@@ -4,6 +4,7 @@ import { AuthenticatedUser } from '../types';
 
 export interface TokenPayload {
   sub: string;
+  sid: string;
   email: string;
   name: string;
   fullName: string;
@@ -13,6 +14,7 @@ export interface TokenPayload {
 
 export function generateAccessToken(user: {
   id: string;
+  sessionId: string;
   email: string;
   username: string;
   fullName: string | null;
@@ -21,6 +23,7 @@ export function generateAccessToken(user: {
 }): string {
   const payload: TokenPayload = {
     sub: user.id,
+    sid: user.sessionId,
     email: user.email,
     name: user.username,
     fullName: user.fullName ?? user.username,
@@ -43,6 +46,7 @@ export function verifyAccessToken(token: string): AuthenticatedUser {
 
   return {
     userId: decoded.sub,
+    sessionId: decoded.sid,
     username: decoded.name,
     email: decoded.email,
     fullName: decoded.fullName,
@@ -57,8 +61,25 @@ export function getTokenExpiryDate(): Date {
   return expires;
 }
 
-export function getRefreshTokenExpiryDate(): Date {
+export function getRefreshTokenExpiryDate(rememberMe = false): Date {
   const expires = new Date();
-  expires.setDate(expires.getDate() + config.jwt.refreshTokenDays);
+  const days = rememberMe ? config.jwt.rememberMeDays : config.jwt.refreshTokenDays;
+  expires.setDate(expires.getDate() + days);
+  return expires;
+}
+
+export function getSessionExpiryDate(rememberMe = false): Date {
+  return getRefreshTokenExpiryDate(rememberMe);
+}
+
+export function getPasswordExpiryDate(): Date {
+  const expires = new Date();
+  expires.setDate(expires.getDate() + config.auth.passwordExpiryDays);
+  return expires;
+}
+
+export function getPasswordResetTokenExpiryDate(): Date {
+  const expires = new Date();
+  expires.setMinutes(expires.getMinutes() + config.auth.passwordResetTokenTtlMinutes);
   return expires;
 }

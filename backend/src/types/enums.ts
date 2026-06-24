@@ -72,8 +72,5 @@ export enum InvoiceStatus {
 
 export enum UserRole {
   SuperAdmin = 'Super Admin',
-  Admin = 'Admin',
-  HR = 'HR',
-  Manager = 'Manager',
-  Employee = 'Employee',
+  HRManager = 'HR Manager',
 }
