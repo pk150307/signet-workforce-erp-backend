@@ -92,6 +92,8 @@ export class AuthService {
     const sessionExpiresAt = getSessionExpiryDate(rememberMe);
     const refreshExpiresAt = getRefreshTokenExpiryDate(rememberMe);
 
+    const fingerprint = this.deviceFingerprint(parsed, context.ipAddress);
+
     const sessionId = await authRepository.createSession({
       userId: user.id,
       ipAddress: context.ipAddress,
@@ -99,6 +101,7 @@ export class AuthService {
       browser: parsed.browser,
       operatingSystem: parsed.operatingSystem,
       deviceType: parsed.deviceType,
+      deviceFingerprint: fingerprint,
       expiresAt: sessionExpiresAt,
       rememberMe,
       createdBy: user.username,
@@ -130,7 +133,6 @@ export class AuthService {
 
     await authRepository.updateLoginSuccess(user.id, context.ipAddress);
 
-    const fingerprint = this.deviceFingerprint(parsed, context.ipAddress);
     const isNewDevice = !(await authRepository.hasKnownDevice(user.id, fingerprint));
 
     await authRepository.recordLoginHistory({
@@ -142,7 +144,8 @@ export class AuthService {
       userAgent: context.userAgent,
       browser: parsed.browser,
       operatingSystem: parsed.operatingSystem,
-      deviceType: fingerprint,
+      deviceType: parsed.deviceType,
+      deviceFingerprint: fingerprint,
       isNewDevice,
     });
 

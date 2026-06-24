@@ -104,6 +104,7 @@ export class AuthRepository {
     browser: string | null;
     operatingSystem: string | null;
     deviceType: string;
+    deviceFingerprint?: string | null;
     expiresAt: Date;
     rememberMe: boolean;
     createdBy: string;
@@ -111,8 +112,8 @@ export class AuthRepository {
     const { rows } = await query<{ id: string }>(
       `INSERT INTO user_sessions (
         user_id, ip_address, user_agent, browser, operating_system, device_type,
-        expires_at, remember_me, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        device_fingerprint, expires_at, remember_me, created_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
       RETURNING id`,
       [
         input.userId,
@@ -121,6 +122,7 @@ export class AuthRepository {
         input.browser,
         input.operatingSystem,
         input.deviceType,
+        input.deviceFingerprint ?? null,
         input.expiresAt,
         input.rememberMe,
         input.createdBy,
@@ -259,13 +261,15 @@ export class AuthRepository {
     browser: string | null;
     operatingSystem: string | null;
     deviceType: string;
+    deviceFingerprint?: string | null;
     isNewDevice: boolean;
   }): Promise<string> {
     const { rows } = await query<{ id: string }>(
       `INSERT INTO login_history (
         user_id, session_id, email_attempted, login_status, failure_reason,
-        ip_address, user_agent, browser, operating_system, device_type, is_new_device, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'System')
+        ip_address, user_agent, browser, operating_system, device_type, device_fingerprint,
+        is_new_device, created_by
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'System')
       RETURNING id`,
       [
         input.userId,
@@ -278,6 +282,7 @@ export class AuthRepository {
         input.browser,
         input.operatingSystem,
         input.deviceType,
+        input.deviceFingerprint ?? null,
         input.isNewDevice,
       ],
     );
@@ -289,7 +294,11 @@ export class AuthRepository {
       `SELECT COUNT(*)::text AS count
        FROM login_history
        WHERE user_id = $1 AND login_status = 'success'
-         AND device_type = $2 AND NOT is_deleted`,
+         AND (
+           device_fingerprint = $2
+           OR (device_fingerprint IS NULL AND device_type = $2)
+         )
+         AND NOT is_deleted`,
       [userId, deviceFingerprint],
     );
     return parseInt(rows[0]?.count ?? '0', 10) > 0;
