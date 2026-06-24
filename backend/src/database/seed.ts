@@ -1,8 +1,6 @@
 import { pool } from './pool';
-import { hashPassword } from '../utils/password';
 import { logger } from '../utils/logger';
-import { seedAuthUser, DEFAULT_ADMIN } from '../scripts/seed-auth';
-import { getPasswordExpiryDate } from '../utils/jwt';
+import { seedDefaultUsers } from '../scripts/seed-auth';
 
 const MODULES = [
   'Employees', 'Clients', 'Sites', 'Attendance', 'Leave',
@@ -85,8 +83,8 @@ export async function seedDatabase(): Promise<void> {
 
   const { rows: existingUsers } = await pool.query('SELECT id FROM users LIMIT 1');
   if (existingUsers.length > 0) {
-    await seedAuthUser();
-    logger.info('Seed skipped — users already exist (default admin credentials refreshed)');
+    await seedDefaultUsers();
+    logger.info('Seed skipped — users already exist (default credentials refreshed)');
     return;
   }
 
@@ -121,37 +119,15 @@ export async function seedDatabase(): Promise<void> {
     );
   }
 
-  const passwordHash = await hashPassword(DEFAULT_ADMIN.password);
-  const passwordExpiresAt = getPasswordExpiryDate();
-  const { rows: userRows } = await pool.query<{ id: string }>(
-    `INSERT INTO users (
-      username, email, password_hash, first_name, last_name, full_name,
-      is_active, is_email_verified, password_expires_at, created_by
-    )
-     VALUES ($1, $2, $3, $4, $5, $6, TRUE, TRUE, $7, 'System')
-     RETURNING id`,
-    [
-      DEFAULT_ADMIN.username,
-      DEFAULT_ADMIN.email,
-      passwordHash,
-      DEFAULT_ADMIN.firstName,
-      DEFAULT_ADMIN.lastName,
-      DEFAULT_ADMIN.fullName,
-      passwordExpiresAt,
-    ],
-  );
+  const adminUserId = await seedDefaultUsers();
 
-  await pool.query(
-    `INSERT INTO user_roles (user_id, role_id, created_by) VALUES ($1, $2, 'System')
-     ON CONFLICT (user_id, role_id) DO NOTHING`,
-    [userRows[0].id, roleId],
-  );
-
-  await pool.query(
-    `INSERT INTO notifications (user_id, title, message, link, created_by)
-     VALUES ($1, 'Welcome to Signet ERP', 'Your administrator account is ready.', '/dashboard', 'System')`,
-    [userRows[0].id],
-  );
+  if (adminUserId) {
+    await pool.query(
+      `INSERT INTO notifications (user_id, title, message, link, created_by)
+       VALUES ($1, 'Welcome to Signet ERP', 'Your administrator account is ready.', '/dashboard', 'System')`,
+      [adminUserId],
+    );
+  }
 
   logger.info('Database seed completed');
 }

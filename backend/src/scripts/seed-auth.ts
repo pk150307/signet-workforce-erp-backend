@@ -12,34 +12,58 @@ export const DEFAULT_ADMIN = {
   fullName: 'Sunil Kumar',
 } as const;
 
+export const DEFAULT_HR_MANAGER = {
+  username: 'contact',
+  email: 'contact@signetcorporateservices.com',
+  password: 'hrSignet@123',
+  firstName: 'HR',
+  lastName: 'Manager',
+  fullName: 'HR Manager',
+} as const;
+
 const LEGACY_ADMIN_EMAIL = 'admin@signet-erp.com';
 
-/**
- * Upsert the default Super Admin account and credentials.
- * Safe to run on every deploy — updates password hash and profile fields.
- */
-export async function seedAuthUser(): Promise<void> {
-  const passwordHash = await hashPassword(DEFAULT_ADMIN.password);
+type SeedUser = {
+  username: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+};
+
+async function upsertSeedUser(
+  user: SeedUser,
+  roleName: string,
+  options?: { legacyEmail?: string },
+): Promise<string> {
+  const passwordHash = await hashPassword(user.password);
   const passwordExpiresAt = getPasswordExpiryDate();
 
   const { rows: roleRows } = await pool.query<{ id: string }>(
-    `SELECT id FROM roles WHERE name = 'Super Admin' AND NOT is_deleted LIMIT 1`,
+    `SELECT id FROM roles WHERE name = $1 AND NOT is_deleted LIMIT 1`,
+    [roleName],
   );
   if (roleRows.length === 0) {
-    throw new Error('Super Admin role not found. Run database migrations first.');
+    throw new Error(`${roleName} role not found. Run database migrations first.`);
   }
   const roleId = roleRows[0].id;
 
+  const lookupEmails = options?.legacyEmail
+    ? [user.email, options.legacyEmail]
+    : [user.email];
+
   const { rows: existing } = await pool.query<{ id: string; email: string }>(
     `SELECT id, email FROM users
-     WHERE (LOWER(email) = LOWER($1) OR LOWER(email) = LOWER($2))
+     WHERE LOWER(email) = ANY($1::text[])
        AND NOT is_deleted
-     ORDER BY CASE WHEN LOWER(email) = LOWER($1) THEN 0 ELSE 1 END
+     ORDER BY CASE WHEN LOWER(email) = LOWER($2) THEN 0 ELSE 1 END
      LIMIT 1`,
-    [DEFAULT_ADMIN.email, LEGACY_ADMIN_EMAIL],
+    [lookupEmails.map((e) => e.toLowerCase()), user.email],
   );
 
   let userId: string;
+  let created = false;
 
   if (existing[0]) {
     userId = existing[0].id;
@@ -63,35 +87,36 @@ export async function seedAuthUser(): Promise<void> {
        WHERE id = $1`,
       [
         userId,
-        DEFAULT_ADMIN.username,
-        DEFAULT_ADMIN.email,
+        user.username,
+        user.email,
         passwordHash,
-        DEFAULT_ADMIN.firstName,
-        DEFAULT_ADMIN.lastName,
-        DEFAULT_ADMIN.fullName,
+        user.firstName,
+        user.lastName,
+        user.fullName,
         passwordExpiresAt,
       ],
     );
-    logger.info('Default admin credentials updated', { email: DEFAULT_ADMIN.email });
+    logger.info('Default user credentials updated', { email: user.email, role: roleName });
   } else {
-    const { rows: created } = await pool.query<{ id: string }>(
+    const { rows: createdRows } = await pool.query<{ id: string }>(
       `INSERT INTO users (
         username, email, password_hash, first_name, last_name, full_name,
         is_active, is_email_verified, password_expires_at, created_by
       ) VALUES ($1,$2,$3,$4,$5,$6,TRUE,TRUE,$7,'System')
       RETURNING id`,
       [
-        DEFAULT_ADMIN.username,
-        DEFAULT_ADMIN.email,
+        user.username,
+        user.email,
         passwordHash,
-        DEFAULT_ADMIN.firstName,
-        DEFAULT_ADMIN.lastName,
-        DEFAULT_ADMIN.fullName,
+        user.firstName,
+        user.lastName,
+        user.fullName,
         passwordExpiresAt,
       ],
     );
-    userId = created[0].id;
-    logger.info('Default admin user created', { email: DEFAULT_ADMIN.email });
+    userId = createdRows[0].id;
+    created = true;
+    logger.info('Default user created', { email: user.email, role: roleName });
   }
 
   await pool.query(
@@ -100,12 +125,38 @@ export async function seedAuthUser(): Promise<void> {
      ON CONFLICT (user_id, role_id) DO NOTHING`,
     [userId, roleId],
   );
+
+  return created ? userId : '';
+}
+
+/**
+ * Upsert the default Super Admin account and credentials.
+ * Safe to run on every deploy — updates password hash and profile fields.
+ */
+export async function seedAuthUser(): Promise<string> {
+  return upsertSeedUser(DEFAULT_ADMIN, 'Super Admin', { legacyEmail: LEGACY_ADMIN_EMAIL });
+}
+
+/**
+ * Upsert the default HR Manager account and credentials.
+ * Safe to run on every deploy — updates password hash and profile fields.
+ */
+export async function seedHrManagerUser(): Promise<void> {
+  await upsertSeedUser(DEFAULT_HR_MANAGER, 'HR Manager');
+}
+
+/** Upsert all default system accounts (Super Admin + HR Manager). */
+export async function seedDefaultUsers(): Promise<string> {
+  const adminUserId = await seedAuthUser();
+  await seedHrManagerUser();
+  return adminUserId;
 }
 
 if (require.main === module) {
-  seedAuthUser()
+  seedDefaultUsers()
     .then(() => {
       console.log(`Auth seed complete — ${DEFAULT_ADMIN.email} / ${DEFAULT_ADMIN.password}`);
+      console.log(`HR Manager seed complete — ${DEFAULT_HR_MANAGER.email} / ${DEFAULT_HR_MANAGER.password}`);
       return pool.end();
     })
     .catch((error) => {
