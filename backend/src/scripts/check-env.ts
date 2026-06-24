@@ -1,6 +1,8 @@
 import net from 'net';
+import '../load-env';
 import { config } from '../config';
 import { connectDB } from '../database';
+import { bucket, describeS3AccessError, isS3Configured, verifyS3Access } from '../config/s3';
 
 const MIN_NODE = 20;
 
@@ -45,6 +47,21 @@ async function main(): Promise<void> {
     console.error('   - Use DB_HOST=signet-workforce-db.cnkkq6k8a3gr.ap-south-1.rds.amazonaws.com in .env (not localhost on macOS)');
     console.error('   - Verify credentials in .env match your Postgres setup\n');
     process.exit(1);
+  }
+
+  if (isS3Configured) {
+    try {
+      await verifyS3Access();
+      console.log(`✓ S3 bucket accessible: ${bucket}`);
+    } catch (error) {
+      const detail = describeS3AccessError(error);
+      if (config.isProduction) {
+        console.error('\n❌ S3 is configured but not accessible.');
+        console.error(`   ${detail}\n`);
+        process.exit(1);
+      }
+      console.warn(`\n⚠️  S3 configured but not accessible: ${detail}\n`);
+    }
   }
 
   console.log(`✓ Environment OK (Node ${process.version}, DB connected, port ${config.port} free)`);

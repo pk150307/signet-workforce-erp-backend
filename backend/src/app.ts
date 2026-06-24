@@ -32,6 +32,12 @@ import notificationRoutes from './modules/notification/notification.routes';
 import reportsRoutes from './modules/reports/reports.routes';
 import statutoryRoutes from './modules/statutory/statutory.routes';
 import companyRoutes from './modules/company/company.routes';
+import usersRoutes from './modules/users/users.routes';
+import rolesRoutes from './modules/roles/roles.routes';
+import permissionsRoutes from './modules/roles/permissions.routes';
+import loginHistoryRoutes from './modules/login-history/login-history.routes';
+import deleteRequestsRoutes from './modules/delete-requests/delete-requests.routes';
+import auditLogsRoutes from './modules/audit-logs/audit-logs.routes';
 
 export function createApp(): express.Application {
   const app = express();
@@ -76,17 +82,19 @@ export function createApp(): express.Application {
 
   app.get('/health', async (_req, res) => {
     const { checkDatabaseConnection } = await import('./database/pool');
-    const { getStorageDiagnostics } = await import('./config/s3');
+    const { getStorageStatus } = await import('./modules/documents/storage.service');
     const dbOk = await checkDatabaseConnection();
-    const storage = getStorageDiagnostics();
-    res.status(dbOk ? 200 : 503).json({
-      status: dbOk ? 'healthy' : 'unhealthy',
+    const storage = getStorageStatus();
+    const storageUnhealthy = config.isProduction && Boolean(storage.error);
+    res.status(dbOk && !storageUnhealthy ? 200 : 503).json({
+      status: dbOk && !storageUnhealthy ? 'healthy' : 'unhealthy',
       database: dbOk,
       storage: {
         backend: storage.backend,
         bucket: storage.bucket,
         region: storage.region,
-        ...(storage.missingEnv.length > 0 ? { missingEnv: storage.missingEnv } : {}),
+        uploadRoot: storage.uploadRoot,
+        ...(storage.error ? { error: storage.error } : {}),
       },
     });
   });
@@ -120,6 +128,12 @@ export function createApp(): express.Application {
   app.use('/api/reports', reportsRoutes);
   app.use('/api/statutory', statutoryRoutes);
   app.use('/api/company', companyRoutes);
+  app.use('/api/users', usersRoutes);
+  app.use('/api/roles', rolesRoutes);
+  app.use('/api/permissions', permissionsRoutes);
+  app.use('/api/login-history', loginHistoryRoutes);
+  app.use('/api/delete-requests', deleteRequestsRoutes);
+  app.use('/api/audit-logs', auditLogsRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

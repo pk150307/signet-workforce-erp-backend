@@ -331,34 +331,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Login with email and password",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "email",
-                  "password"
-                ],
-                "properties": {
-                  "email": {
-                    "type": "string"
-                  },
-                  "password": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Login successful"
-          }
-        }
+        "summary": "Login with email and password"
       }
     },
     "/api/auth/refresh-token": {

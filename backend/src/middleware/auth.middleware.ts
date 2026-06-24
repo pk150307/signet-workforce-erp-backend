@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { UnauthorizedError } from '../common/errors';
 import { verifyAccessToken } from '../utils/jwt';
+import { authService } from '../modules/auth/auth.service';
 
 export function traceIdMiddleware(req: Request, _res: Response, next: NextFunction): void {
   req.traceId = (req.headers['x-request-id'] as string) ?? uuidv4();
@@ -18,8 +19,18 @@ export function authenticate(req: Request, _res: Response, next: NextFunction): 
 
   const token = header.slice(7);
   try {
-    req.user = verifyAccessToken(token);
-    next();
+    const user = verifyAccessToken(token);
+    authService
+      .validateSession(user.sessionId)
+      .then((valid) => {
+        if (!valid) {
+          next(new UnauthorizedError('Session expired. Please sign in again.'));
+          return;
+        }
+        req.user = user;
+        next();
+      })
+      .catch(next);
   } catch (error) {
     if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
       next(new UnauthorizedError('Invalid or expired token.'));
