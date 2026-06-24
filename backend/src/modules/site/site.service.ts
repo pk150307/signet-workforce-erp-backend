@@ -2,6 +2,9 @@ import { siteRepository } from './site.repository';
 import { CreateSiteInput, SiteFilter, UpdateSiteInput } from './site.types';
 import { NotFoundError } from '../../common/errors';
 import { clientRepository } from '../client/client.repository';
+import { deleteApprovalService } from '../delete-requests/delete-requests.service';
+import { DeleteActionContext, DeleteActionResult } from '../delete-requests/delete-requests.types';
+import { IAM_MODULES } from '../iam/iam.constants';
 
 export class SiteService {
   list(filter: SiteFilter) {
@@ -35,9 +38,23 @@ export class SiteService {
     return siteRepository.findById(input.id);
   }
 
-  async delete(id: string, deletedBy: string) {
-    const deleted = await siteRepository.softDelete(id, deletedBy);
-    if (!deleted) throw new NotFoundError('Site', id);
+  async delete(id: string, context: DeleteActionContext): Promise<DeleteActionResult> {
+    const site = await siteRepository.findById(id);
+    if (!site) throw new NotFoundError('Site', id);
+
+    return deleteApprovalService.handleDelete({
+      module: IAM_MODULES.SITES,
+      entityType: IAM_MODULES.SITES,
+      entityId: id,
+      entityLabel: site.siteName,
+      entitySnapshot: {
+        id: site.id,
+        siteCode: site.siteCode,
+        siteName: site.siteName,
+        clientId: site.clientId,
+      },
+      context,
+    });
   }
 }
 

@@ -1,5 +1,4 @@
 import { PoolClient } from 'pg';
-import path from 'path';
 import fs from 'fs';
 import { query, withTransaction } from '../../database/pool';
 import {
@@ -40,13 +39,9 @@ import { formatDate, formatDateTime, toNumber } from '../../utils/formatters';
 import { nextEmployeeCode } from '../../utils/next-code';
 import {
   getStoredFileReference,
-  getUploadedFileUrl,
-  isRemoteFilePath,
   resolveFileUrl,
-  uploadRoot,
   UploadedFile,
 } from '../documents/upload.config';
-import { resolveS3Key } from '../../config/s3';
 import { designationGradeRepository } from '../designation-grade/designation-grade.repository';
 import { computeGradeGross } from '../designation-grade/designation-grade.types';
 
@@ -222,7 +217,7 @@ export class EmployeeRepository {
     return rows.length > 0;
   }
 
-  private mapListRow(r: Record<string, unknown>): EmployeeListItem {
+  private async mapListRow(r: Record<string, unknown>): Promise<EmployeeListItem> {
     return {
       id: String(r.id),
       employeeCode: String(r.employee_code),
@@ -234,11 +229,12 @@ export class EmployeeRepository {
       siteName: r.site_name ? String(r.site_name) : null,
       status: Number(r.status) as EmployeeLifecycleStatus,
       joiningDate: formatDate(String(r.joining_date))!,
-      profilePhotoUrl: resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
+      profilePhotoUrl:
+        resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
     };
   }
 
-  private mapDetailRow(r: Record<string, unknown>): EmployeeDetail {
+  private async mapDetailRow(r: Record<string, unknown>): Promise<EmployeeDetail> {
     return {
       id: String(r.id),
       employeeCode: String(r.employee_code),
@@ -249,7 +245,8 @@ export class EmployeeRepository {
       alternatePhone: r.alternate_phone ? String(r.alternate_phone) : null,
       dateOfBirth: formatDate(String(r.date_of_birth))!,
       gender: Number(r.gender),
-      profilePhotoUrl: resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
+      profilePhotoUrl:
+        resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
       joiningDate: formatDate(String(r.joining_date))!,
       confirmationDate: formatDate(r.confirmation_date as string | null),
       resignationDate: formatDate(r.resignation_date as string | null),
@@ -455,7 +452,7 @@ export class EmployeeRepository {
       [...params, filter.pageSize, offset],
     );
 
-    const items = rows.map((r) => this.mapListRow(r));
+    const items = await Promise.all(rows.map((r) => this.mapListRow(r)));
     return createPaginatedResult(items, parseInt(countResult.rows[0].count, 10), filter.page, filter.pageSize);
   }
 
@@ -466,7 +463,7 @@ export class EmployeeRepository {
       [id],
     );
     const r = rows[0];
-    return r ? this.mapDetailRow(r) : null;
+    return r ? await this.mapDetailRow(r) : null;
   }
 
   async getDashboardStats(): Promise<EmployeeDashboardStats> {
@@ -558,7 +555,7 @@ export class EmployeeRepository {
        LIMIT $1`,
       [limit],
     );
-    return rows.map((r) => this.mapListRow(r));
+    return Promise.all(rows.map((r) => this.mapListRow(r)));
   }
 
   async getRecentActivities(limit: number): Promise<EmployeeActivity[]> {
@@ -1365,16 +1362,23 @@ export class EmployeeRepository {
        ORDER BY uploaded_at DESC`,
       [employeeId],
     );
-    return rows.map((r) => ({
-      id: String(r.id),
-      type: String(r.document_type) as EmployeeDocumentItem['type'],
-      label: String(r.label),
-      fileName: String(r.file_name),
-      fileUrl: resolveFileUrl(String(r.file_path)),
-      mimeType: String(r.mime_type),
-      version: Number(r.version),
-      uploadedAt: formatDateTime(r.uploaded_at as Date)!,
-    }));
+    return Promise.all(
+      rows.map(async (r) => {
+        const id = String(r.id);
+        const filePath = String(r.file_path);
+        return {
+          id,
+          type: String(r.document_type) as EmployeeDocumentItem['type'],
+          label: String(r.label),
+          fileName: String(r.file_name),
+          fileUrl: resolveFileUrl(filePath),
+          downloadUrl: `/api/employees/${employeeId}/documents/${id}/download`,
+          mimeType: String(r.mime_type),
+          version: Number(r.version),
+          uploadedAt: formatDateTime(r.uploaded_at as Date)!,
+        };
+      }),
+    );
   }
 
   async uploadDocument(
@@ -1385,7 +1389,6 @@ export class EmployeeRepository {
     uploadedBy: string,
   ): Promise<EmployeeDocumentItem> {
     const fileRef = getStoredFileReference(file as UploadedFile);
-    const url = getUploadedFileUrl(file as UploadedFile);
 
     return withTransaction(async (client) => {
       const { rows: existing } = await client.query<{ id: string; version: number }>(
@@ -1443,12 +1446,15 @@ export class EmployeeRepository {
         { documentType: type, fileName: file.originalname },
       );
 
+      const documentId = rows[0].id;
+
       return {
-        id: rows[0].id,
+        id: documentId,
         type: type as EmployeeDocumentItem['type'],
         label,
         fileName: file.originalname,
-        fileUrl: url,
+        fileUrl: resolveFileUrl(fileRef),
+        downloadUrl: `/api/employees/${employeeId}/documents/${documentId}/download`,
         mimeType: file.mimetype,
         version,
         uploadedAt: formatDateTime(new Date())!,
@@ -1490,35 +1496,22 @@ export class EmployeeRepository {
     );
     if (!rows[0]) return null;
 
-    const stored = rows[0].file_path;
-    const fileName = rows[0].file_name;
-    const mimeType = rows[0].mime_type;
-
-    const s3Key = resolveS3Key(stored);
-    if (s3Key) {
-      return {
-        source: 's3',
-        s3Key,
-        fileName,
-        mimeType,
-      };
-    }
-
-    if (isRemoteFilePath(stored)) {
-      return {
-        source: 'url',
-        url: stored,
-        fileName,
-        mimeType,
-      };
-    }
-
     return {
-      source: 'disk',
-      diskPath: path.join(uploadRoot, stored),
-      fileName,
-      mimeType,
+      storedPath: rows[0].file_path,
+      fileName: rows[0].file_name,
+      mimeType: rows[0].mime_type,
     };
+  }
+
+  async getProfilePhotoPath(employeeId: string): Promise<string | null> {
+    const { rows } = await query<{ profile_photo_url: string | null }>(
+      `SELECT COALESCE(pd.profile_photo_url, e.profile_photo_url) AS profile_photo_url
+       FROM employees e
+       LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
+       WHERE e.id = $1 AND NOT e.is_deleted`,
+      [employeeId],
+    );
+    return rows[0]?.profile_photo_url ?? null;
   }
 
   async bulkImport(rows: BulkImportRow[], createdBy: string): Promise<BulkImportResult> {

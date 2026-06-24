@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import { employeeService } from './employee.service';
 import { sendCreated, sendNoContent, sendSuccess } from '../../common/response';
-import { AppError } from '../../common/errors';
+import { AppError, NotFoundError } from '../../common/errors';
 import { paramId } from '../../utils/request';
 import {
   EmployeeLifecycleStatus,
   EmploymentType,
 } from './employee.constants';
 import { BulkImportRow } from './employee.types';
+import { respondWithFileDownload } from '../documents/document-download';
 
 function parseEmployeeStatusQuery(
   value: unknown,
@@ -91,8 +92,23 @@ export class EmployeeController {
     const documentId = paramId(req, 'documentId');
     const file = await employeeService.downloadDocument(employeeId, documentId);
     const inline = req.query.inline === 'true' || req.query.inline === '1';
-    const { sendDocumentDownload } = await import('../documents/document-download');
-    await sendDocumentDownload(res, file, { inline });
+    await respondWithFileDownload(req, res, file.storedPath, file, { inline });
+  }
+
+  async downloadPhoto(req: Request, res: Response): Promise<void> {
+    const employeeId = paramId(req);
+    const photoPath = await employeeService.getProfilePhotoPath(employeeId);
+    if (!photoPath) {
+      throw new NotFoundError('Profile photo', employeeId);
+    }
+    const inline = req.query.inline !== 'false' && req.query.inline !== '0';
+    await respondWithFileDownload(
+      req,
+      res,
+      photoPath,
+      { fileName: 'profile-photo', mimeType: 'image/jpeg' },
+      { inline },
+    );
   }
 
   async create(req: Request, res: Response): Promise<void> {

@@ -106,20 +106,16 @@ export interface EmployeeDocumentItem {
   label: string;
   fileName: string;
   fileUrl: string;
+  downloadUrl: string;
   mimeType: string;
   version: number;
   uploadedAt: string;
 }
 
-export type DocumentDownloadSource = 'disk' | 's3' | 'url';
-
 export interface DocumentDownloadInfo {
   fileName: string;
   mimeType: string;
-  source: DocumentDownloadSource;
-  diskPath?: string;
-  s3Key?: string;
-  url?: string;
+  storedPath: string;
 }
 
 export interface EmployeeTimelineItem {

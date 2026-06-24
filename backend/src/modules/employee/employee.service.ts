@@ -212,10 +212,12 @@ export class EmployeeService {
     if (!file) {
       throw new NotFoundError('Document', documentId);
     }
-    if (file.source === 'disk' && file.diskPath && !employeeRepository.documentExistsOnDisk(file.diskPath)) {
-      throw new NotFoundError('Document', documentId);
-    }
     return file;
+  }
+
+  async getProfilePhotoPath(employeeId: string) {
+    await this.getById(employeeId);
+    return employeeRepository.getProfilePhotoPath(employeeId);
   }
 
   bulkImport(rows: BulkImportRow[], createdBy: string) {

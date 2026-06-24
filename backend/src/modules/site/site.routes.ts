@@ -6,6 +6,7 @@ import {
   siteIdValidation,
   updateSiteValidation,
 } from './site.validation';
+import { deleteWithReasonValidation } from '../delete-requests/delete-requests.validation';
 import { validate } from '../../common/response';
 import { authenticate } from '../../middleware/auth.middleware';
 
@@ -33,7 +34,7 @@ router.put('/:id', validate(updateSiteValidation), (req, res, next) => {
   siteController.update(req, res).catch(next);
 });
 
-router.delete('/:id', validate(siteIdValidation), (req, res, next) => {
+router.delete('/:id', validate([...siteIdValidation, ...deleteWithReasonValidation]), (req, res, next) => {
   siteController.delete(req, res).catch(next);
 });
 

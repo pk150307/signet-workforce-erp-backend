@@ -70,6 +70,10 @@ router.post('/:id/photo', validate(employeeIdValidation), photoUpload.single('ph
   employeeController.uploadPhoto(req, res).catch(next);
 });
 
+router.get('/:id/photo/download', validate(employeeIdValidation), (req, res, next) => {
+  employeeController.downloadPhoto(req, res).catch(next);
+});
+
 router.post(
   '/:id/documents',
   documentUpload.single('file'),
