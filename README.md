@@ -63,8 +63,14 @@ The API starts at **http://localhost:5000**.
 
 | Field | Value |
 |-------|-------|
-| Email | `admin@signet-erp.com` |
-| Password | `Admin@123` |
+| Email | `sunil.kumar@signetcorporateservices.com` |
+| Password | `AdminSignet@123` |
+
+To reset the default admin on an existing database:
+
+```bash
+cd backend && npm run seed:auth
+```
 
 ## VS Code / Cursor
 
@@ -77,7 +83,10 @@ All routes are prefixed with `/api`:
 
 | Module | Endpoints |
 |--------|-----------|
-| **Auth** | `POST /auth/login`, `/refresh-token`, `/logout`, `/change-password` |
+| **Auth** | `POST /auth/login`, `/refresh-token`, `/logout`, `/change-password`, `/forgot-password`, `/reset-password`, `GET /auth/profile` |
+| **Users** | `GET/POST /users`, `GET/PUT /users/:id`, `PATCH /users/:id/status`, `POST /users/:id/reset-password`, `GET /users/:id/login-history` |
+| **Login History** | `GET /login-history`, `GET /login-history/summary`, `GET /auth/login-history` (self) |
+| **Roles** | `GET/POST /roles`, `GET/PUT /roles/:id`, `PUT /roles/:id/permissions`, `GET /permissions` |
 | **Employees** | CRUD with pagination and filters |
 | **Departments / Designations** | List organization data |
 | **Clients / Sites** | Client and site management |
