@@ -4,6 +4,7 @@ export enum DocumentType {
   Payslip = 3,
   OfferLetter = 4,
   ExperienceLetter = 5,
+  Contract = 6,
   Other = 99,
 }
 

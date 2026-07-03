@@ -15,6 +15,7 @@ export const getEmployeesValidation = [
   query('departmentId').optional().isString(),
   query('designationId').optional().isString(),
   query('siteId').optional().isUUID(),
+  query('clientId').optional().isUUID(),
   query('status')
     .optional()
     .custom((value) => {
