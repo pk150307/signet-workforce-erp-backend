@@ -5,6 +5,85 @@ export interface InvoiceLineItemDto {
   unitRate: number;
   amount: number;
   hsnSacCode: string | null;
+  componentCode?: string | null;
+}
+
+export interface InvoiceTaxLineDto {
+  taxType: 'cgst' | 'sgst' | 'igst';
+  taxRate: number;
+  taxableAmount: number;
+  taxAmount: number;
+}
+
+export interface InvoicePrintCompany {
+  companyName: string;
+  legalName: string | null;
+  address: string;
+  city: string;
+  state: string;
+  pinCode: string | null;
+  gstNumber: string | null;
+  panNumber: string | null;
+  email: string | null;
+  phone: string | null;
+  logoUrl: string | null;
+  pfEstablishmentCode: string | null;
+  esicCode: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankIfsc: string | null;
+  bankBranch: string | null;
+}
+
+export interface InvoicePrintDto {
+  id: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  month: number;
+  year: number;
+  status: number;
+  statusLabel: string;
+  isLocked: boolean;
+  clientId: string;
+  clientName: string;
+  clientGstNumber: string | null;
+  clientPanNumber: string | null;
+  clientAddress: string | null;
+  clientCity: string | null;
+  clientState: string | null;
+  placeOfSupply: string | null;
+  siteId: string | null;
+  siteName: string | null;
+  siteCode: string | null;
+  natureOfService: string;
+  sacCode: string;
+  lineItems: InvoiceLineItemDto[];
+  employeeCharges: number;
+  pfContribution: number;
+  esicContribution: number;
+  lwfAmount: number;
+  serviceChargeAmount: number;
+  taxableValue: number;
+  subTotal: number;
+  gstRate: number;
+  gstAmount: number;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  gstType: 'cgst_sgst' | 'igst';
+  totalAmount: number;
+  paidAmount: number;
+  balanceAmount: number;
+  amountInWords: string;
+  notes: string | null;
+  termsAndConditions: string | null;
+  taxLines: InvoiceTaxLineDto[];
+  company: InvoicePrintCompany | null;
+  qrPayload: string | null;
 }
 
 export interface InvoiceDetailDto {
@@ -141,17 +220,4 @@ export interface InvoiceTimelineEntry {
   description: string;
   performedBy: string;
   performedAt: string;
-}
-
-export interface InvoicePrintCompany {
-  companyName: string;
-  legalName: string | null;
-  address: string;
-  city: string;
-  state: string;
-  pinCode: string | null;
-  gstNumber: string | null;
-  panNumber: string | null;
-  email: string | null;
-  phone: string | null;
 }

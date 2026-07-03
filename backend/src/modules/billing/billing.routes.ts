@@ -10,9 +10,26 @@ import { nextInvoiceNumber } from '../../utils/next-code';
 import { billingService } from './billing.service';
 import { renderInvoiceHtml } from './billing.print';
 import { paramId } from '../../utils/request';
+import billingConfigurationRoutes from './billing-configuration.routes';
+import billingEngineRoutes from './billing-engine.routes';
+import { billingEngineService } from './billing-engine.service';
+import { billingInvoiceService } from './billing-invoice.service';
+import { billingInvoicePrintService } from './billing-invoice-print.service';
+import invoicePaymentRoutes from './invoice-payment.routes';
+import { invoicePaymentService } from './invoice-payment.service';
+import { PAYMENT_MODES } from './invoice-payment.types';
+import billingReportsRoutes from './billing-reports.routes';
+import invoiceAuditRoutes from './invoice-audit.routes';
+import { invoiceAuditService } from './invoice-audit.service';
 
 const router = Router();
 router.use(authenticate);
+
+router.use('/configurations', billingConfigurationRoutes);
+router.use('/engine', billingEngineRoutes);
+router.use('/payments', invoicePaymentRoutes);
+router.use('/reports', billingReportsRoutes);
+router.use('/audit-logs', invoiceAuditRoutes);
 
 router.get(
   '/invoices',
@@ -20,7 +37,7 @@ router.get(
     query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
     query('clientId').optional().isUUID(),
-    query('status').optional().isInt({ min: 1, max: 7 }).toInt(),
+    query('status').optional().isInt({ min: 1, max: 10 }).toInt(),
     query('month').optional().isInt({ min: 1, max: 12 }).toInt(),
     query('year').optional().isInt({ min: 2000, max: 2100 }).toInt(),
     query('search').optional().isString(),
@@ -237,6 +254,31 @@ router.post(
   },
 );
 
+router.post(
+  '/invoices/preview',
+  validate([
+    body('month').isInt({ min: 1, max: 12 }),
+    body('year').isInt({ min: 2000, max: 2100 }),
+    body('clientId').isUUID(),
+    body('siteId').isUUID(),
+    body('skipValidation').optional().isBoolean(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingEngineService.calculate({
+        month: Number(req.body.month),
+        year: Number(req.body.year),
+        clientId: String(req.body.clientId),
+        siteId: String(req.body.siteId),
+        skipValidation: true,
+      });
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.get(
   '/invoices/preview-for-site',
   validate([
@@ -254,6 +296,40 @@ router.get(
         req.query.gstRate ? Number(req.query.gstRate) : 18,
       );
       sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/invoices/generate',
+  validate([
+    body('month').isInt({ min: 1, max: 12 }),
+    body('year').isInt({ min: 2000, max: 2100 }),
+    body('clientId').isUUID(),
+    body('siteId').isUUID(),
+    body('notes').optional().isString(),
+    body('termsAndConditions').optional().isString(),
+    body('invoiceDate').optional().isISO8601(),
+    body('dueDate').optional().isISO8601(),
+    body('skipValidation').optional().isBoolean(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await billingInvoiceService.generate({
+        month: Number(req.body.month),
+        year: Number(req.body.year),
+        clientId: String(req.body.clientId),
+        siteId: String(req.body.siteId),
+        notes: req.body.notes,
+        termsAndConditions: req.body.termsAndConditions,
+        invoiceDate: req.body.invoiceDate,
+        dueDate: req.body.dueDate,
+        skipValidation: req.body.skipValidation ?? false,
+        createdBy: req.user?.username ?? 'System',
+      });
+      sendSuccess(res, result, 201);
     } catch (e) {
       next(e);
     }
@@ -351,6 +427,114 @@ router.post(
   },
 );
 
+router.get(
+  '/invoices/:invoiceId/activity',
+  validate([
+    param('invoiceId').isUUID(),
+    query('limit').optional().isInt({ min: 1, max: 200 }).toInt(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await invoiceAuditService.getActivity(
+        paramId(req, 'invoiceId'),
+        req.query.limit ? Number(req.query.limit) : 100,
+      );
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/invoices/:invoiceId/history',
+  validate([param('invoiceId').isUUID()]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await invoiceAuditService.getHistory(paramId(req, 'invoiceId'));
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/invoices/:invoiceId/audit-logs',
+  validate([
+    param('invoiceId').isUUID(),
+    query('page').optional().isInt({ min: 1 }).toInt(),
+    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await invoiceAuditService.listByInvoice(
+        paramId(req, 'invoiceId'),
+        Number(req.query.page) || 1,
+        Number(req.query.pageSize) || 20,
+      );
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/invoices/:invoiceId/payments/summary',
+  validate([param('invoiceId').isUUID()]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await invoicePaymentService.getSummary(paramId(req, 'invoiceId'));
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/invoices/:invoiceId/payments',
+  validate([param('invoiceId').isUUID()]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await invoicePaymentService.listByInvoice(paramId(req, 'invoiceId'));
+      sendSuccess(res, result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/invoices/:invoiceId/payments',
+  validate([
+    param('invoiceId').isUUID(),
+    body('paymentDate').isISO8601(),
+    body('amount').isFloat({ min: 0.01 }),
+    body('referenceNumber').optional({ nullable: true }).isString(),
+    body('utrNumber').optional({ nullable: true }).isString(),
+    body('paymentMode').optional().isIn(PAYMENT_MODES),
+    body('remarks').optional({ nullable: true }).isString(),
+  ]),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await invoicePaymentService.recordPayment(paramId(req, 'invoiceId'), {
+        paymentDate: req.body.paymentDate,
+        amount: Number(req.body.amount),
+        referenceNumber: req.body.referenceNumber,
+        utrNumber: req.body.utrNumber,
+        paymentMode: req.body.paymentMode,
+        remarks: req.body.remarks,
+        createdBy: req.user?.username ?? 'System',
+      });
+      sendSuccess(res, result, 201);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.get('/invoices/:id', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await billingService.getInvoiceById(paramId(req));
@@ -405,7 +589,7 @@ router.patch(
   '/invoices/:id/status',
   validate([
     param('id').isUUID(),
-    body('status').isInt({ min: 1, max: 7 }),
+    body('status').isInt({ min: 1, max: 10 }),
     body('paidAmount').optional().isFloat({ min: 0 }),
     body('note').optional().isString(),
   ]),
@@ -424,9 +608,24 @@ router.patch(
   },
 );
 
+router.get('/invoices/:id/preview', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invoice = await billingInvoicePrintService.getInvoiceForPrint(paramId(req));
+    if (req.query.format === 'html') {
+      const html = renderInvoiceHtml(invoice);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+      return;
+    }
+    sendSuccess(res, invoice);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/invoices/:id/pdf', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const invoice = await billingService.getInvoiceById(paramId(req));
+    const invoice = await billingInvoicePrintService.getInvoiceForPrint(paramId(req));
     const html = renderInvoiceHtml(invoice);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${invoice.invoiceNumber}.html"`);
@@ -438,7 +637,7 @@ router.get('/invoices/:id/pdf', validate([param('id').isUUID()]), async (req: Re
 
 router.get('/invoices/:id/print', validate([param('id').isUUID()]), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const invoice = await billingService.getInvoiceById(paramId(req));
+    const invoice = await billingInvoicePrintService.getInvoiceForPrint(paramId(req));
     const html = renderInvoiceHtml(invoice);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
