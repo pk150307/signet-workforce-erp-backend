@@ -3,8 +3,9 @@ import { query } from 'express-validator';
 import { query as dbQuery } from '../../database/pool';
 import { authenticate } from '../../middleware/auth.middleware';
 import { sendSuccess, validate } from '../../common/response';
-import { AttendanceStatus, InvoiceStatus } from '../../types/enums';
+import { AttendanceStatus } from '../../types/enums';
 import { toNumber } from '../../utils/formatters';
+import { billingReportsService } from '../billing/billing-reports.service';
 
 const router = Router();
 router.use(authenticate);
@@ -161,37 +162,42 @@ router.get(
   validate([
     query('month').optional().isInt({ min: 1, max: 12 }),
     query('year').optional().isInt({ min: 2000, max: 2100 }),
+    query('clientId').optional().isUUID(),
+    query('siteId').optional().isUUID(),
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const month = Number(req.query.month) || new Date().getMonth() + 1;
-      const year = Number(req.query.year) || new Date().getFullYear();
+      const summary = await billingReportsService.getPeriodSummary({
+        month: req.query.month ? Number(req.query.month) : undefined,
+        year: req.query.year ? Number(req.query.year) : undefined,
+        clientId: req.query.clientId ? String(req.query.clientId) : undefined,
+        siteId: req.query.siteId ? String(req.query.siteId) : undefined,
+      });
 
       const { rows: invoices } = await dbQuery<Record<string, unknown>>(
-        `SELECT i.invoice_number, i.total_amount, i.paid_amount, i.status, c.company_name
+        `SELECT i.id, i.invoice_number, i.total_amount, i.paid_amount, i.status, c.company_name
          FROM invoices i INNER JOIN clients c ON c.id = i.client_id
          WHERE i.month = $1 AND i.year = $2 AND NOT i.is_deleted
+           AND i.status NOT IN (1, 7, 10)
          ORDER BY i.invoice_date DESC`,
-        [month, year],
+        [summary.month, summary.year],
       );
 
-      const totalRevenue = invoices.reduce((s, r) => s + toNumber(r.total_amount as string), 0);
-      const totalCollected = invoices.reduce((s, r) => s + toNumber(r.paid_amount as string), 0);
-      const outstanding = totalRevenue - totalCollected;
-      const overdue = invoices.filter((r) => Number(r.status) === InvoiceStatus.Overdue).length;
-
       sendSuccess(res, {
-        month,
-        year,
+        month: summary.month,
+        year: summary.year,
         summary: {
-          invoiceCount: invoices.length,
-          totalRevenue,
-          totalCollected,
-          outstanding,
-          overdueCount: overdue,
-          collectionRate: totalRevenue > 0 ? Math.round((totalCollected / totalRevenue) * 100) : 0,
+          invoiceCount: summary.invoiceCount,
+          totalRevenue: summary.totalBilled,
+          totalCollected: summary.totalCollected,
+          outstanding: summary.outstanding,
+          overdueCount: summary.overdueCount,
+          collectionRate: summary.collectionRate,
+          taxableValue: summary.taxableValue,
+          totalGst: summary.totalGst,
         },
         invoices: invoices.map((r) => ({
+          id: String(r.id),
           invoiceNumber: String(r.invoice_number),
           clientName: String(r.company_name),
           totalAmount: toNumber(r.total_amount as string),

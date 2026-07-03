@@ -220,7 +220,7 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
         esi,
         lwf,
         0,
-        PayrollStatus.Processing,
+        PayrollStatus.Processed,
         createdBy,
       ],
     );
@@ -232,7 +232,7 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
      WHERE id = $1`,
     [
       payrollRunId,
-      PayrollStatus.Processing,
+      PayrollStatus.Processed,
       employees.length,
       roundOff(totalGross),
       roundOff(totalDeductions),

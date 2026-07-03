@@ -158,7 +158,7 @@ router.post(
             round2(pf),
             round2(esi),
             pt,
-            PayrollStatus.Processing,
+            PayrollStatus.Processed,
             req.user?.username ?? 'System',
           ],
         );
@@ -170,7 +170,7 @@ router.post(
          WHERE id = $1`,
         [
           payrollRunId,
-          PayrollStatus.Processing,
+          PayrollStatus.Processed,
           employees.length,
           round2(totalGross),
           round2(totalDeductions),
