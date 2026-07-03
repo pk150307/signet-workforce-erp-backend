@@ -68,6 +68,9 @@ export enum InvoiceStatus {
   Paid = 5,
   Overdue = 6,
   Cancelled = 7,
+  Generated = 8,
+  Approved = 9,
+  Archived = 10,
 }
 
 export enum UserRole {

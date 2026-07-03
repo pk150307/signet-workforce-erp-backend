@@ -22,6 +22,7 @@ import attendanceRoutes from './modules/attendance/attendance.routes';
 import leaveRoutes from './modules/leave/leave.routes';
 import payrollRoutes from './modules/payroll/payroll.routes';
 import billingRoutes from './modules/billing/billing.routes';
+import contractRoutes from './modules/contract/contract.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import clientRoutes from './modules/client/client.routes';
 import siteRoutes from './modules/site/site.routes';
@@ -118,6 +119,7 @@ export function createApp(): express.Application {
   app.use('/api/leave', leaveRoutes);
   app.use('/api/payroll', payrollRoutes);
   app.use('/api/billing', billingRoutes);
+  app.use('/api/contracts', contractRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/clients', clientRoutes);
   app.use('/api/sites', siteRoutes);

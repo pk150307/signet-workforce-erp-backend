@@ -1190,6 +1190,255 @@
 
 /**
  * @openapi
+ * /api/contracts:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: List client contracts
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [draft, active, expired, terminated, cancelled] }
+ *       - in: query
+ *         name: activeOnly
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Paginated contracts }
+ *   post:
+ *     tags: [Contracts]
+ *     summary: Create contract
+ *     responses:
+ *       201: { description: Contract created }
+ *
+ * /api/contracts/summary:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: Contract status summary
+ *     responses:
+ *       200: { description: Contract counts by status }
+ *
+ * /api/contracts/client/{clientId}:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: List contracts for a client
+ *     parameters:
+ *       - in: path
+ *         name: clientId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Client contracts }
+ *
+ * /api/contracts/{id}:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: Get contract detail
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Contract detail with documents }
+ *   put:
+ *     tags: [Contracts]
+ *     summary: Update contract
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Updated contract }
+ *   delete:
+ *     tags: [Contracts]
+ *     summary: Delete contract
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Deleted }
+ *
+ * /api/contracts/{id}/status:
+ *   patch:
+ *     tags: [Contracts]
+ *     summary: Update contract status
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Status updated }
+ *
+ * /api/contracts/{id}/documents:
+ *   get:
+ *     tags: [Contracts]
+ *     summary: List contract documents
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Contract documents }
+ *   post:
+ *     tags: [Contracts]
+ *     summary: Upload contract document
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: Document uploaded }
+ *
+ * /api/billing/engine/calculate:
+ *   post:
+ *     tags: [Billing]
+ *     summary: Run billing calculation engine
+ *     responses:
+ *       200: { description: Calculated billing components and tax breakdown }
+ *
+ * /api/billing/engine/validate:
+ *   post:
+ *     tags: [Billing]
+ *     summary: Validate billing prerequisites
+ *     responses:
+ *       200: { description: Validation result }
+ *
+ * /api/billing/invoices/preview:
+ *   post:
+ *     tags: [Billing]
+ *     summary: Preview invoice via billing engine
+ *     responses:
+ *       200: { description: Billing engine preview result }
+ *
+ * /api/billing/invoices/generate:
+ *   post:
+ *     tags: [Billing]
+ *     summary: Generate and lock invoice from billing engine
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [month, year, clientId, siteId]
+ *     responses:
+ *       201: { description: Generated invoice with FY series number }
+ */
+
+/**
+ * @openapi
+ * /api/billing/configurations:
+ *   get:
+ *     tags: [Billing]
+ *     summary: List billing configurations
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: isActive
+ *         schema: { type: boolean }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Paginated billing configurations }
+ *   post:
+ *     tags: [Billing]
+ *     summary: Create billing configuration for a client site
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientId, siteId]
+ *     responses:
+ *       201: { description: Billing configuration created }
+ *
+ * /api/billing/configurations/components:
+ *   get:
+ *     tags: [Billing]
+ *     summary: List master billing components
+ *     responses:
+ *       200: { description: Billing component catalog }
+ *
+ * /api/billing/configurations/by-site/{siteId}:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Get billing configuration by site
+ *     parameters:
+ *       - in: path
+ *         name: siteId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Billing configuration detail }
+ *
+ * /api/billing/configurations/{id}:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Get billing configuration by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Billing configuration detail }
+ *   put:
+ *     tags: [Billing]
+ *     summary: Update billing configuration
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Updated billing configuration }
+ *   delete:
+ *     tags: [Billing]
+ *     summary: Delete billing configuration
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Deleted }
+ */
+
+/**
+ * @openapi
  * /api/billing/invoices:
  *   get:
  *     tags: [Billing]
@@ -1386,6 +1635,390 @@
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200: { description: Invoice with line items and client/site details }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{id}/preview:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Get invoice print model (JSON) or HTML preview
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [html] }
+ *         description: Return rendered HTML when set to html
+ *     responses:
+ *       200: { description: Invoice print DTO or HTML document }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{id}/print:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Render printable GST tax invoice (HTML)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: A4 HTML invoice for browser print }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{id}/pdf:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Download invoice as HTML attachment (print-to-PDF)
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: HTML invoice file download }
+ */
+/**
+ * @openapi
+ * /api/billing/payments:
+ *   get:
+ *     tags: [Billing]
+ *     summary: List invoice payments
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: invoiceId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: paymentMode
+ *         schema: { type: string, enum: [cheque, neft, rtgs, upi, cash, other] }
+ *       - in: query
+ *         name: fromDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: toDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Paginated payment records }
+ */
+/**
+ * @openapi
+ * /api/billing/payments/{id}:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Get payment by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Payment detail }
+ *   put:
+ *     tags: [Billing]
+ *     summary: Update a payment record
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               paymentDate: { type: string, format: date }
+ *               amount: { type: number }
+ *               referenceNumber: { type: string, nullable: true }
+ *               utrNumber: { type: string, nullable: true }
+ *               paymentMode: { type: string, enum: [cheque, neft, rtgs, upi, cash, other] }
+ *               remarks: { type: string, nullable: true }
+ *     responses:
+ *       200: { description: Updated payment and invoice summary }
+ *   delete:
+ *     tags: [Billing]
+ *     summary: Soft-delete a payment and recalculate invoice balance
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Updated invoice payment summary }
+ */
+/**
+ * @openapi
+ * /api/billing/reports/summary:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Billing period summary with GST totals
+ *     parameters:
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Billed, collected, outstanding, and GST summary }
+ */
+/**
+ * @openapi
+ * /api/billing/reports/outstanding:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Outstanding receivables with aging buckets
+ *     parameters:
+ *       - in: query
+ *         name: asOfDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 50 }
+ *     responses:
+ *       200: { description: Aging summary and outstanding invoice list }
+ */
+/**
+ * @openapi
+ * /api/billing/reports/collections:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Payment collections report
+ *     parameters:
+ *       - in: query
+ *         name: fromDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: toDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: paymentMode
+ *         schema: { type: string, enum: [cheque, neft, rtgs, upi, cash, other] }
+ *     responses:
+ *       200: { description: Collections by mode, client, and payment lines }
+ */
+/**
+ * @openapi
+ * /api/billing/reports/gst:
+ *   get:
+ *     tags: [Billing]
+ *     summary: GST liability summary
+ *     parameters:
+ *       - in: query
+ *         name: month
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: year
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: fromDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: toDate
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: CGST, SGST, IGST breakdown with client-wise totals }
+ */
+/**
+ * @openapi
+ * /api/billing/audit-logs:
+ *   get:
+ *     tags: [Billing]
+ *     summary: List invoice audit logs
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: invoiceId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: action
+ *         schema: { type: string }
+ *       - in: query
+ *         name: fromDate
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: toDate
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200: { description: Paginated invoice audit logs }
+ */
+/**
+ * @openapi
+ * /api/billing/audit-logs/actions:
+ *   get:
+ *     tags: [Billing]
+ *     summary: List distinct invoice audit actions
+ *     responses:
+ *       200: { description: Action names }
+ */
+/**
+ * @openapi
+ * /api/billing/audit-logs/{id}:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Get invoice audit log by ID
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Audit log detail }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{invoiceId}/audit-logs:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Audit logs for a specific invoice
+ *     parameters:
+ *       - in: path
+ *         name: invoiceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Paginated audit logs for invoice }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{invoiceId}/history:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Version history for an invoice
+ *     parameters:
+ *       - in: path
+ *         name: invoiceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Invoice revision history }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{invoiceId}/activity:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Unified activity feed (audit, status, history)
+ *     parameters:
+ *       - in: path
+ *         name: invoiceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 100 }
+ *     responses:
+ *       200: { description: Merged chronological activity }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{invoiceId}/payments:
+ *   get:
+ *     tags: [Billing]
+ *     summary: List payments for an invoice
+ *     parameters:
+ *       - in: path
+ *         name: invoiceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Payment list for invoice }
+ *   post:
+ *     tags: [Billing]
+ *     summary: Record a payment against an invoice
+ *     parameters:
+ *       - in: path
+ *         name: invoiceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [paymentDate, amount]
+ *             properties:
+ *               paymentDate: { type: string, format: date }
+ *               amount: { type: number, minimum: 0.01 }
+ *               referenceNumber: { type: string, nullable: true }
+ *               utrNumber: { type: string, nullable: true }
+ *               paymentMode: { type: string, enum: [cheque, neft, rtgs, upi, cash, other], default: neft }
+ *               remarks: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Recorded payment with updated invoice summary }
+ */
+/**
+ * @openapi
+ * /api/billing/invoices/{invoiceId}/payments/summary:
+ *   get:
+ *     tags: [Billing]
+ *     summary: Payment summary for an invoice
+ *     parameters:
+ *       - in: path
+ *         name: invoiceId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Total, paid, balance, and payment count }
  */
 
 /**
@@ -1830,7 +2463,7 @@
  * /api/reports/billing:
  *   get:
  *     tags: [Reports]
- *     summary: Billing summary report
+ *     summary: Billing summary report (legacy dashboard)
  *     parameters:
  *       - in: query
  *         name: month
@@ -1838,8 +2471,14 @@
  *       - in: query
  *         name: year
  *         schema: { type: integer }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: siteId
+ *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: Billing report }
+ *       200: { description: Billing report with invoice list }
  */
 
 export {};
