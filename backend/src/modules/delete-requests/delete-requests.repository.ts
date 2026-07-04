@@ -1,5 +1,10 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  defaultSortFields,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { DELETE_REQUEST_STATUS } from '../iam/iam.constants';
 import {
   CreateDeleteRequestInput,
@@ -18,7 +23,7 @@ const SELECT_FIELDS = `
 `;
 
 export class DeleteRequestsRepository {
-  private buildConditions(filter: DeleteRequestFilter): { where: string; params: unknown[] } {
+  private buildConditions(filter: DeleteRequestFilter): { conditions: string[]; params: unknown[] } {
     const conditions = ['NOT dr.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -61,35 +66,25 @@ export class DeleteRequestsRepository {
       i++;
     }
 
-    return { where: conditions.join(' AND '), params };
+    return { conditions, params };
   }
 
-  async findAll(filter: DeleteRequestFilter): Promise<PaginatedResult<DeleteRequestListItem>> {
-    const { where, params } = this.buildConditions(filter);
-    let i = params.length + 1;
+  async findAll(filter: DeleteRequestFilter): Promise<CursorPaginatedResult<DeleteRequestListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { conditions, params } = this.buildConditions(filter);
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM delete_requests dr WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ${SELECT_FIELDS}
+      selectSql: `SELECT ${SELECT_FIELDS}
        FROM delete_requests dr
        LEFT JOIN users ru ON ru.id = dr.requested_by
-       LEFT JOIN users rv ON rv.id = dr.reviewed_by
-       WHERE ${where}
-       ORDER BY dr.created_at DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       LEFT JOIN users rv ON rv.id = dr.reviewed_by`,
+      sortFields: defaultSortFields('dr'),
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<DeleteRequestDetail | null> {

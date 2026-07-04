@@ -27,7 +27,13 @@ import {
   EMPLOYEE_CODE_PREFIX,
   EmployeeLifecycleStatus,
 } from './employee.constants';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  buildCursorSql,
+  defaultSortFields,
+  finalizeCursorPage,
+  parseCursorPaginationQuery,
+} from '../../types';
 import {
   parseOptionalUuid,
   resolveClientId,
@@ -354,7 +360,8 @@ export class EmployeeRepository {
     ec.emergency_contact_name, ec.emergency_contact_relationship, ec.emergency_contact_phone
   `;
 
-  async findAll(filter: EmployeeFilter): Promise<PaginatedResult<EmployeeListItem>> {
+  async findAll(filter: EmployeeFilter): Promise<CursorPaginatedResult<EmployeeListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT e.is_deleted'];
     const params: unknown[] = [];
     let paramIndex = 1;
@@ -412,29 +419,17 @@ export class EmployeeRepository {
       paramIndex++;
     }
 
+    const sortFields = defaultSortFields('e');
+    const cursorSql = buildCursorSql(paramIndex, pagination, sortFields);
+    if (cursorSql.whereClause) {
+      conditions.push(cursorSql.whereClause);
+      params.push(...cursorSql.params);
+      paramIndex += cursorSql.params.length;
+    }
+
     const where = conditions.join(' AND ');
-    const sortMap: Record<string, string> = {
-      name: 'COALESCE(pd.first_name, e.first_name)',
-      code: 'e.employee_code',
-      joiningdate: 'COALESCE(ed.joining_date, e.joining_date)',
-      createdat: 'e.created_at',
-    };
-    const sortCol = sortMap[(filter.sortBy ?? 'createdat').toLowerCase()] ?? 'e.created_at';
-    const sortDir = filter.sortDir?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-
-    const countResult = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM employees e
-       LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
-       LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
-       INNER JOIN departments d ON d.id = COALESCE(ed.department_id, e.department_id)
-       INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
-       WHERE ${where}`,
-      params,
-    );
-
-    const offset = (filter.page - 1) * filter.pageSize;
     const { rows } = await query<Record<string, unknown>>(
-      `SELECT e.id, e.employee_code, e.email, e.phone, e.status,
+      `SELECT e.id, e.employee_code, e.email, e.phone, e.status, e.created_at,
               COALESCE(pd.first_name, e.first_name) AS first_name,
               COALESCE(pd.last_name, e.last_name) AS last_name,
               COALESCE(pd.profile_photo_url, e.profile_photo_url) AS profile_photo_url,
@@ -447,13 +442,23 @@ export class EmployeeRepository {
        INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
        WHERE ${where}
-       ORDER BY ${sortCol} ${sortDir}
-       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      [...params, filter.pageSize, offset],
+       ORDER BY ${cursorSql.orderBy}
+       LIMIT $${paramIndex}`,
+      [...params, cursorSql.limit],
     );
 
-    const items = await Promise.all(rows.map((r) => this.mapListRow(r)));
-    return createPaginatedResult(items, parseInt(countResult.rows[0].count, 10), filter.page, filter.pageSize);
+    const mapped = await Promise.all(rows.map(async (r) => ({
+      row: r,
+      item: await this.mapListRow(r),
+    })));
+
+    return finalizeCursorPage(
+      mapped,
+      pagination,
+      (entry) => entry.item,
+      sortFields,
+      { getCursorRow: (entry) => entry.row },
+    );
   }
 
   async findById(id: string): Promise<EmployeeDetail | null> {

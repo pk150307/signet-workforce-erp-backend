@@ -1,8 +1,9 @@
 import { body, param, query } from 'express-validator';
 
 export const listDepartmentsValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
-  query('pageSize').optional().isInt({ min: 1, max: 500 }).toInt(),
+  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('clientId').optional().isString().trim(),
   query('search').optional().isString().trim(),
   query('isActive').optional().isBoolean().toBoolean(),

@@ -1,6 +1,10 @@
 import { query } from '../../database/pool';
 import { NotFoundError } from '../../common/errors';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { parseOptionalUuid, resolveClientId, resolveDepartmentId } from '../../utils/organization';
 import { buildNextSequentialCode } from '../../utils/code-sequence';
 import {
@@ -29,31 +33,31 @@ export class DesignationRepository {
     WHERE NOT des.is_deleted
   `;
 
-  async findAll(filter: DesignationFilter): Promise<PaginatedResult<DesignationListItem>> {
-    const { extra, params, nextIndex } = await this.buildFilter(filter);
+  async findAll(filter: DesignationFilter): Promise<CursorPaginatedResult<DesignationListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { conditions, params } = await this.buildFilter(filter);
+    conditions.unshift('NOT des.is_deleted');
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count ${this.baseFrom}${extra}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT des.id, des.code, des.name, des.is_active, des.department_id,
+      selectSql: `SELECT des.id, des.code, des.name, des.is_active, des.department_id,
               d.name AS department_name, d.client_id, c.company_name AS client_name,
               ${EMPLOYEE_COUNT_SQL} AS employee_count,
               ${GRADE_COUNT_SQL} AS grade_count
-       ${this.baseFrom}${extra}
-       ORDER BY c.company_name, d.name, des.name
-       LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       FROM designations des
+       LEFT JOIN departments d ON d.id = des.department_id AND NOT d.is_deleted
+       LEFT JOIN clients c ON c.id = d.client_id AND NOT c.is_deleted`,
+      sortFields: [
+        { column: 'c.company_name', key: 'clientName', direction: 'ASC' },
+        { column: 'd.name', key: 'departmentName', direction: 'ASC' },
+        { column: 'des.name', key: 'name', direction: 'ASC' },
+        { column: 'des.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<DesignationDetail | null> {
@@ -163,7 +167,7 @@ export class DesignationRepository {
 
   private async buildFilter(
     filter: DesignationFilter,
-  ): Promise<{ extra: string; params: unknown[]; nextIndex: number }> {
+  ): Promise<{ conditions: string[]; params: unknown[] }> {
     const conditions: string[] = [];
     const params: unknown[] = [];
     let i = 1;
@@ -201,8 +205,7 @@ export class DesignationRepository {
       params.push(filter.isActive);
     }
 
-    const extra = conditions.length ? ` AND ${conditions.join(' AND ')}` : '';
-    return { extra, params, nextIndex: i };
+    return { conditions, params };
   }
 
   private mapListItem(r: Record<string, unknown>): DesignationListItem {

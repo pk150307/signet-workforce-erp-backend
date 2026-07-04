@@ -25,8 +25,10 @@ export interface DeleteRequestDetail extends DeleteRequestListItem {
 }
 
 export interface DeleteRequestFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   status?: string;
   module?: string;
   entityType?: string;

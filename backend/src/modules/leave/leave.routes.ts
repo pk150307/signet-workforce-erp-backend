@@ -3,7 +3,11 @@ import { body, param, query } from 'express-validator';
 import { query as dbQuery } from '../../database/pool';
 import { authenticate } from '../../middleware/auth.middleware';
 import { sendId, sendNoContent, sendSuccess, validate } from '../../common/response';
-import { createPaginatedResult } from '../../types';
+import {
+  defaultSortFields,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { LeaveStatus, LeaveType } from '../../types/enums';
 import { formatDate } from '../../utils/formatters';
 import { NotFoundError, AppError } from '../../common/errors';
@@ -15,44 +19,40 @@ router.use(authenticate);
 router.get(
   '/',
   validate([
-    query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('cursor').optional().isString().trim(),
+    query('direction').optional().isIn(['next', 'prev']),
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const page = Number(req.query.page) || 1;
-      const pageSize = Number(req.query.pageSize) || 20;
+      const pagination = parseCursorPaginationQuery({
+        pageSize: Number(req.query.pageSize) || 10,
+        cursor: req.query.cursor as string | undefined,
+        direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
+      });
 
-      const count = await dbQuery<{ count: string }>(
-        'SELECT COUNT(*) AS count FROM leave_requests WHERE NOT is_deleted',
-      );
-
-      const { rows } = await dbQuery<Record<string, unknown>>(
-        `SELECT lr.id, e.first_name, e.last_name, lr.leave_type, lr.status,
-                lr.from_date, lr.to_date, lr.number_of_days, lr.reason
+      const result = await runCursorList({
+        queryFn: dbQuery,
+        pagination,
+        conditions: ['NOT lr.is_deleted'],
+        selectSql: `SELECT lr.id, e.first_name, e.last_name, lr.leave_type, lr.status,
+                lr.from_date, lr.to_date, lr.number_of_days, lr.reason, lr.created_at
          FROM leave_requests lr
-         INNER JOIN employees e ON e.id = lr.employee_id
-         WHERE NOT lr.is_deleted
-         ORDER BY lr.created_at DESC
-         LIMIT $1 OFFSET $2`,
-        [pageSize, (page - 1) * pageSize],
-      );
+         INNER JOIN employees e ON e.id = lr.employee_id`,
+        sortFields: defaultSortFields('lr'),
+        mapRow: (r) => ({
+          id: String(r.id),
+          employeeName: `${r.first_name} ${r.last_name}`,
+          leaveType: Number(r.leave_type) as LeaveType,
+          status: Number(r.status) as LeaveStatus,
+          fromDate: formatDate(String(r.from_date)),
+          toDate: formatDate(String(r.to_date)),
+          numberOfDays: parseFloat(String(r.number_of_days)),
+          reason: String(r.reason),
+        }),
+      });
 
-      const items = rows.map((r) => ({
-        id: String(r.id),
-        employeeName: `${r.first_name} ${r.last_name}`,
-        leaveType: Number(r.leave_type) as LeaveType,
-        status: Number(r.status) as LeaveStatus,
-        fromDate: formatDate(String(r.from_date)),
-        toDate: formatDate(String(r.to_date)),
-        numberOfDays: parseFloat(String(r.number_of_days)),
-        reason: String(r.reason),
-      }));
-
-      sendSuccess(
-        res,
-        createPaginatedResult(items, parseInt(count.rows[0].count, 10), page, pageSize),
-      );
+      sendSuccess(res, result);
     } catch (e) {
       next(e);
     }

@@ -151,8 +151,11 @@ export interface EmployeeDashboardStats {
 }
 
 export interface EmployeeFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  /** @deprecated offset page — ignored when cursor pagination is used */
+  page?: number;
   search?: string;
   departmentId?: string;
   designationId?: string;

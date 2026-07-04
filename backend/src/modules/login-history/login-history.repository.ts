@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { LoginHistoryFilter, LoginHistoryItem, LoginHistorySummary } from './login-history.types';
 
 function mapRow(r: Record<string, unknown>): LoginHistoryItem {
@@ -31,7 +35,7 @@ const SELECT_FIELDS = `
 `;
 
 export class LoginHistoryRepository {
-  private buildConditions(filter: LoginHistoryFilter): { where: string; params: unknown[] } {
+  private buildConditions(filter: LoginHistoryFilter): { conditions: string[]; params: unknown[] } {
     const conditions = ['NOT lh.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -72,37 +76,27 @@ export class LoginHistoryRepository {
       i++;
     }
 
-    return { where: conditions.join(' AND '), params };
+    return { conditions, params };
   }
 
-  async findAll(filter: LoginHistoryFilter): Promise<PaginatedResult<LoginHistoryItem>> {
-    const { where, params } = this.buildConditions(filter);
-    let i = params.length + 1;
+  async findAll(filter: LoginHistoryFilter): Promise<CursorPaginatedResult<LoginHistoryItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { conditions, params } = this.buildConditions(filter);
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM login_history lh
-       LEFT JOIN users u ON u.id = lh.user_id
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ${SELECT_FIELDS}
+      selectSql: `SELECT ${SELECT_FIELDS}
        FROM login_history lh
-       LEFT JOIN users u ON u.id = lh.user_id AND NOT u.is_deleted
-       WHERE ${where}
-       ORDER BY lh.logged_in_at DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map(mapRow),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       LEFT JOIN users u ON u.id = lh.user_id AND NOT u.is_deleted`,
+      sortFields: [
+        { column: 'lh.logged_in_at', key: 'loggedInAt', direction: 'DESC' },
+        { column: 'lh.id', key: 'id', direction: 'DESC' },
+      ],
+      mapRow: mapRow,
+    });
   }
 
   async getSummary(userId?: string): Promise<LoginHistorySummary> {

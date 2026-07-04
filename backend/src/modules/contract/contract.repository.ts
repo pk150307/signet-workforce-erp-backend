@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { buildNextSequentialCode } from '../../utils/code-sequence';
 import {
   ContractDetail,
@@ -109,7 +113,8 @@ export class ContractRepository {
     );
   }
 
-  async findAll(filter: ContractFilter): Promise<PaginatedResult<ContractListItem>> {
+  async findAll(filter: ContractFilter): Promise<CursorPaginatedResult<ContractListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT ct.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -142,33 +147,22 @@ export class ContractRepository {
       i++;
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM contracts ct
-       INNER JOIN clients c ON c.id = ct.client_id AND NOT c.is_deleted
-       LEFT JOIN sites s ON s.id = ct.site_id AND NOT s.is_deleted
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ${LIST_SELECT}
+      selectSql: `SELECT ${LIST_SELECT}
        FROM contracts ct
        INNER JOIN clients c ON c.id = ct.client_id AND NOT c.is_deleted
-       LEFT JOIN sites s ON s.id = ct.site_id AND NOT s.is_deleted
-       WHERE ${where}
-       ORDER BY ct.start_date DESC, ct.contract_name
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map(mapListRow),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       LEFT JOIN sites s ON s.id = ct.site_id AND NOT s.is_deleted`,
+      sortFields: [
+        { column: 'ct.start_date', key: 'startDate', direction: 'DESC' },
+        { column: 'ct.contract_name', key: 'contractName', direction: 'ASC' },
+        { column: 'ct.id', key: 'id', direction: 'DESC' },
+      ],
+      mapRow: mapListRow,
+    });
   }
 
   async getSummary(clientId?: string): Promise<ContractSummary> {

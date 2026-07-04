@@ -17,8 +17,10 @@ export interface LoginHistoryItem {
 }
 
 export interface LoginHistoryFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   userId?: string;
   loginStatus?: string;
   dateFrom?: string;

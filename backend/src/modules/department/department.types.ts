@@ -32,8 +32,10 @@ export interface UpdateDepartmentInput extends Omit<CreateDepartmentInput, 'clie
 }
 
 export interface DepartmentFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   clientId?: string;
   search?: string;
   isActive?: boolean;

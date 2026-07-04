@@ -55,8 +55,10 @@ export interface UpdateDesignationGradeInput extends CreateDesignationGradeInput
 }
 
 export interface DesignationGradeFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   clientId?: string;
   designationId?: string;
   departmentId?: string;

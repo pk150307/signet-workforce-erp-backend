@@ -23,8 +23,9 @@ function parseEmployeeStatusQuery(
 export class EmployeeController {
   async getAll(req: Request, res: Response): Promise<void> {
     const result = await employeeService.getAll({
-      page: Number(req.query.page) || 1,
-      pageSize: Number(req.query.pageSize) || 20,
+      pageSize: Number(req.query.pageSize) || 10,
+      cursor: req.query.cursor as string | undefined,
+      direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       search: req.query.search as string | undefined,
       departmentId: req.query.departmentId as string | undefined,
       designationId: req.query.designationId as string | undefined,

@@ -56,8 +56,10 @@ export interface ContractDetail extends ContractListItem {
 }
 
 export interface ContractFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   clientId?: string;
   siteId?: string;
   status?: string;

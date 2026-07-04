@@ -9,8 +9,9 @@ import {
 const lifecycleValues = Object.values(EmployeeLifecycleStatus).filter((v) => typeof v === 'number');
 
 export const getEmployeesValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
   query('departmentId').optional().isString(),
   query('designationId').optional().isString(),

@@ -33,8 +33,10 @@ export interface UpdateDesignationInput extends CreateDesignationInput {
 }
 
 export interface DesignationFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   clientId?: string;
   search?: string;
   departmentId?: string;

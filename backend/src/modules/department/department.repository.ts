@@ -1,6 +1,10 @@
 import { query } from '../../database/pool';
 import { NotFoundError } from '../../common/errors';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { parseOptionalUuid, resolveClientId } from '../../utils/organization';
 import { buildNextSequentialCode } from '../../utils/code-sequence';
 import {
@@ -24,31 +28,47 @@ export class DepartmentRepository {
     WHERE NOT d.is_deleted
   `;
 
-  async findAll(filter: DepartmentFilter): Promise<PaginatedResult<DepartmentListItem>> {
-    const { extra, params, nextIndex } = await this.buildFilter(filter);
+  async findAll(filter: DepartmentFilter): Promise<CursorPaginatedResult<DepartmentListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const conditions = ['NOT d.is_deleted'];
+    const params: unknown[] = [];
+    let i = 1;
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count ${this.baseFrom}${extra}`,
+    if (filter.clientId) {
+      conditions.push(`d.client_id = $${i++}::uuid`);
+      params.push(await resolveClientId(filter.clientId));
+    }
+
+    if (filter.search) {
+      conditions.push(`(LOWER(d.name) LIKE $${i} OR LOWER(d.code) LIKE $${i})`);
+      params.push(`%${filter.search.toLowerCase()}%`);
+      i++;
+    }
+
+    if (filter.isActive !== undefined) {
+      conditions.push(`d.is_active = $${i++}`);
+      params.push(filter.isActive);
+    }
+
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT d.id, d.client_id, c.company_name AS client_name,
+      selectSql: `SELECT d.id, d.client_id, c.company_name AS client_name,
               d.code, d.name, d.description, d.is_active, d.head_of_department_id,
               TRIM(CONCAT(hod.first_name, ' ', hod.last_name)) AS head_name,
               ${EMPLOYEE_COUNT_SQL} AS employee_count
-       ${this.baseFrom}${extra}
-       ORDER BY c.company_name, d.name
-       LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       FROM departments d
+       INNER JOIN clients c ON c.id = d.client_id AND NOT c.is_deleted
+       LEFT JOIN employees hod ON hod.id = d.head_of_department_id AND NOT hod.is_deleted`,
+      sortFields: [
+        { column: 'c.company_name', key: 'clientName', direction: 'ASC' },
+        { column: 'd.name', key: 'name', direction: 'ASC' },
+        { column: 'd.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<DepartmentDetail | null> {
@@ -159,33 +179,6 @@ export class DepartmentRepository {
       return { clause: 'd.id = $1::uuid', param: uuid };
     }
     return { clause: 'd.code = $1', param: id };
-  }
-
-  private async buildFilter(
-    filter: DepartmentFilter,
-  ): Promise<{ extra: string; params: unknown[]; nextIndex: number }> {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    let i = 1;
-
-    if (filter.clientId) {
-      conditions.push(`d.client_id = $${i++}::uuid`);
-      params.push(await resolveClientId(filter.clientId));
-    }
-
-    if (filter.search) {
-      conditions.push(`(LOWER(d.name) LIKE $${i} OR LOWER(d.code) LIKE $${i})`);
-      params.push(`%${filter.search.toLowerCase()}%`);
-      i++;
-    }
-
-    if (filter.isActive !== undefined) {
-      conditions.push(`d.is_active = $${i++}`);
-      params.push(filter.isActive);
-    }
-
-    const extra = conditions.length ? ` AND ${conditions.join(' AND ')}` : '';
-    return { extra, params, nextIndex: i };
   }
 
   private mapListItem(r: Record<string, unknown>): DepartmentListItem {
