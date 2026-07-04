@@ -34,12 +34,32 @@ export interface CursorSortField {
 }
 
 export const DEFAULT_PAGE_SIZE = 10;
-export const MAX_PAGE_SIZE = 100;
+/** Discrete page-size choices exposed in list UIs (plus All). */
+export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100, 150, 200] as const;
+/** Value used when the client selects "All". */
+export const ALL_PAGE_SIZE = 10_000;
+/** Maximum accepted pageSize (includes All). */
+export const MAX_PAGE_SIZE = ALL_PAGE_SIZE;
 
 const DEFAULT_SORT: CursorSortField[] = [
   { column: 'created_at', key: 'createdAt', direction: 'DESC' },
   { column: 'id', key: 'id', direction: 'DESC' },
 ];
+
+/** Normalize pageSize from query input (supports "all"). */
+export function parsePageSize(value: unknown): number {
+  if (value == null || value === '') {
+    return DEFAULT_PAGE_SIZE;
+  }
+  if (typeof value === 'string' && value.trim().toLowerCase() === 'all') {
+    return ALL_PAGE_SIZE;
+  }
+  const rawSize = Number(value);
+  if (!Number.isFinite(rawSize)) {
+    return DEFAULT_PAGE_SIZE;
+  }
+  return Math.min(Math.max(Math.trunc(rawSize), 1), MAX_PAGE_SIZE);
+}
 
 export function parseCursorPaginationQuery(query: {
   pageSize?: unknown;
@@ -47,10 +67,7 @@ export function parseCursorPaginationQuery(query: {
   direction?: unknown;
   page?: unknown;
 }): CursorPaginationQuery {
-  const rawSize = Number(query.pageSize ?? DEFAULT_PAGE_SIZE);
-  const pageSize = Number.isFinite(rawSize)
-    ? Math.min(Math.max(Math.trunc(rawSize), 1), MAX_PAGE_SIZE)
-    : DEFAULT_PAGE_SIZE;
+  const pageSize = parsePageSize(query.pageSize);
 
   const direction = String(query.direction ?? 'next').toLowerCase() === 'prev' ? 'prev' : 'next';
   const cursor = query.cursor != null && String(query.cursor).trim() !== ''
@@ -84,9 +101,22 @@ export function legacyOffsetFromCursor(pagination: CursorPaginationQuery): {
   throw new ValidationError({ cursor: ['Invalid or expired cursor'] });
 }
 
+/** Express-validator for pageSize (integer 1..MAX or "all"). */
+export const pageSizeQueryValidator = defaultQuery('pageSize')
+  .optional()
+  .customSanitizer((value) => {
+    if (value == null || value === '') return value;
+    if (typeof value === 'string' && value.trim().toLowerCase() === 'all') {
+      return ALL_PAGE_SIZE;
+    }
+    return value;
+  })
+  .isInt({ min: 1, max: MAX_PAGE_SIZE })
+  .toInt();
+
 /** Express-validator chain for cursor list endpoints. */
 export const cursorPaginationValidators = [
-  defaultQuery('pageSize').optional().isInt({ min: 1, max: MAX_PAGE_SIZE }).toInt(),
+  pageSizeQueryValidator,
   defaultQuery('cursor').optional().isString().trim(),
   defaultQuery('direction').optional().isIn(['next', 'prev']),
 ];

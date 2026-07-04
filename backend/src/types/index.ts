@@ -7,8 +7,10 @@ export type {
 } from '../common/cursor-pagination';
 
 export {
+  ALL_PAGE_SIZE,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
   buildCursorFromRow,
   buildCursorSql,
   createCursorPaginatedResult,
@@ -18,6 +20,8 @@ export {
   encodeCursor,
   finalizeCursorPage,
   parseCursorPaginationQuery,
+  parsePageSize,
+  pageSizeQueryValidator,
   legacyOffsetFromCursor,
   runCursorList,
 } from '../common/cursor-pagination';
