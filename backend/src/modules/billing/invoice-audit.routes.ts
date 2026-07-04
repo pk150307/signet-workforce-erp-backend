@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { param, query } from 'express-validator';
+import { pageSizeQueryValidator, parsePageSize } from '../../types';
 import { sendSuccess, validate } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { invoiceAuditService } from './invoice-audit.service';
@@ -7,7 +8,7 @@ import { invoiceAuditService } from './invoice-audit.service';
 const router = Router();
 
 const listValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('invoiceId').optional().isUUID(),
@@ -44,7 +45,7 @@ router.get(
 router.get('/', validate(listValidation), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await invoiceAuditService.list({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       invoiceId: req.query.invoiceId ? String(req.query.invoiceId) : undefined,

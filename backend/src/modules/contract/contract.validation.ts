@@ -1,4 +1,5 @@
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 import { BILLING_CYCLE, BILLING_TYPE, CONTRACT_STATUS } from '../billing/billing.constants';
 
 const billingTypeValues = Object.values(BILLING_TYPE);
@@ -39,7 +40,7 @@ const contractBodyFields = [
 ];
 
 export const listContractsValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('clientId').optional().isUUID(),

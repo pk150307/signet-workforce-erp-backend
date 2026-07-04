@@ -3,6 +3,7 @@ import { clientService } from './client.service';
 import { CreateClientInput, UpdateClientInput } from './client.types';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { parsePageSize } from '../../types';
 import {
   sendDeleteActionResult,
   toDeleteActionContext,
@@ -11,7 +12,7 @@ import {
 export class ClientController {
   async list(req: Request, res: Response): Promise<void> {
     const result = await clientService.list({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       search: req.query.search as string | undefined,
@@ -55,7 +56,7 @@ export class ClientController {
 
   async listSites(req: Request, res: Response): Promise<void> {
     const result = await clientService.listSites(paramId(req), {
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
     });

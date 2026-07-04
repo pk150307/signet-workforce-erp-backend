@@ -5,6 +5,8 @@ import { authenticate } from '../../middleware/auth.middleware';
 import { sendId, sendSuccess, validate } from '../../common/response';
 import {
   parseCursorPaginationQuery,
+  pageSizeQueryValidator,
+  parsePageSize,
   runCursorList,
 } from '../../types';
 import { InvoiceStatus } from '../../types/enums';
@@ -37,7 +39,7 @@ router.use('/audit-logs', invoiceAuditRoutes);
 router.get(
   '/invoices',
   validate([
-    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    pageSizeQueryValidator,
     query('cursor').optional().isString().trim(),
     query('direction').optional().isIn(['next', 'prev']),
     query('clientId').optional().isUUID(),
@@ -49,7 +51,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const pagination = parseCursorPaginationQuery({
-        pageSize: Number(req.query.pageSize) || 10,
+        pageSize: parsePageSize(req.query.pageSize),
         cursor: req.query.cursor as string | undefined,
         direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       });
@@ -368,7 +370,7 @@ router.get(
   '/invoices/by-site/:siteId',
   validate([
     param('siteId').isUUID(),
-    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    pageSizeQueryValidator,
     query('cursor').optional().isString().trim(),
     query('direction').optional().isIn(['next', 'prev']),
     query('month').optional().isInt({ min: 1, max: 12 }).toInt(),
@@ -377,7 +379,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await billingService.getInvoicesBySite(paramId(req, 'siteId'), {
-        pageSize: Number(req.query.pageSize) || 10,
+        pageSize: parsePageSize(req.query.pageSize),
         cursor: req.query.cursor as string | undefined,
         direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
         month: req.query.month ? Number(req.query.month) : undefined,
@@ -464,14 +466,14 @@ router.get(
   '/invoices/:invoiceId/audit-logs',
   validate([
     param('invoiceId').isUUID(),
-    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    pageSizeQueryValidator,
     query('cursor').optional().isString().trim(),
     query('direction').optional().isIn(['next', 'prev']),
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await invoiceAuditService.listByInvoice(paramId(req, 'invoiceId'), {
-        pageSize: Number(req.query.pageSize) || 10,
+        pageSize: parsePageSize(req.query.pageSize),
         cursor: req.query.cursor as string | undefined,
         direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       });

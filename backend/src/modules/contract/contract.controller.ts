@@ -7,11 +7,12 @@ import { documentsService } from '../documents/documents.service';
 import { DocumentType } from '../documents/documents.types';
 import { contractRepository } from './contract.repository';
 import { query } from '../../database/pool';
+import { parsePageSize } from '../../types';
 
 export class ContractController {
   async list(req: Request, res: Response): Promise<void> {
     const result = await contractService.list({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       clientId: req.query.clientId as string | undefined,
@@ -42,7 +43,7 @@ export class ContractController {
 
   async listByClient(req: Request, res: Response): Promise<void> {
     const result = await contractService.list({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       clientId: paramId(req, 'clientId'),

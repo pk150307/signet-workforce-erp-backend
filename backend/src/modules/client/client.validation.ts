@@ -1,7 +1,8 @@
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 
 export const listClientsValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
@@ -33,7 +34,7 @@ export const updateClientValidation = [...clientIdValidation, ...clientBodyField
 
 export const clientSitesValidation = [
   ...clientIdValidation,
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
 ];

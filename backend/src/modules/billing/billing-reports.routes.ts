@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { query } from 'express-validator';
+import { pageSizeQueryValidator, parsePageSize } from '../../types';
 import { sendSuccess, validate } from '../../common/response';
 import { PAYMENT_MODES } from './invoice-payment.types';
 import { billingReportsService } from './billing-reports.service';
@@ -37,7 +38,7 @@ router.get(
     ...periodFilters,
     query('asOfDate').optional().isISO8601(),
     query('page').optional().isInt({ min: 1 }).toInt(),
-    query('pageSize').optional().isInt({ min: 1, max: 200 }).toInt(),
+    pageSizeQueryValidator,
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -48,7 +49,7 @@ router.get(
         siteId: req.query.siteId ? String(req.query.siteId) : undefined,
         asOfDate: req.query.asOfDate ? String(req.query.asOfDate) : undefined,
         page: req.query.page ? Number(req.query.page) : undefined,
-        pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
+        pageSize: req.query.pageSize != null && req.query.pageSize !== '' ? parsePageSize(req.query.pageSize) : undefined,
       });
       sendSuccess(res, result);
     } catch (e) {
@@ -63,7 +64,7 @@ router.get(
     ...periodFilters,
     query('paymentMode').optional().isIn(PAYMENT_MODES),
     query('page').optional().isInt({ min: 1 }).toInt(),
-    query('pageSize').optional().isInt({ min: 1, max: 200 }).toInt(),
+    pageSizeQueryValidator,
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -76,7 +77,7 @@ router.get(
         toDate: req.query.toDate ? String(req.query.toDate) : undefined,
         paymentMode: req.query.paymentMode ? String(req.query.paymentMode) : undefined,
         page: req.query.page ? Number(req.query.page) : undefined,
-        pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
+        pageSize: req.query.pageSize != null && req.query.pageSize !== '' ? parsePageSize(req.query.pageSize) : undefined,
       });
       sendSuccess(res, result);
     } catch (e) {

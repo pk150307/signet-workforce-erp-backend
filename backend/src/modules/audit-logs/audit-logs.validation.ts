@@ -1,7 +1,8 @@
 import { param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 
 export const listAuditLogsValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('userId').optional().isUUID(),

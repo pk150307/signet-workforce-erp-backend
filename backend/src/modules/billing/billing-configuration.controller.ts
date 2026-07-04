@@ -6,11 +6,12 @@ import {
 } from './billing-configuration.types';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { parsePageSize } from '../../types';
 
 export class BillingConfigurationController {
   async list(req: Request, res: Response): Promise<void> {
     const result = await billingConfigurationService.list({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       clientId: req.query.clientId as string | undefined,

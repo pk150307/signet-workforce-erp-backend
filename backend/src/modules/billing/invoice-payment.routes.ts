@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator, parsePageSize } from '../../types';
 import { sendSuccess, validate } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { PAYMENT_MODES } from './invoice-payment.types';
@@ -10,7 +11,7 @@ const router = Router();
 router.get(
   '/',
   validate([
-    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    pageSizeQueryValidator,
     query('cursor').optional().isString().trim(),
     query('direction').optional().isIn(['next', 'prev']),
     query('invoiceId').optional().isUUID(),
@@ -23,7 +24,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await invoicePaymentService.list({
-        pageSize: Number(req.query.pageSize) || 10,
+        pageSize: parsePageSize(req.query.pageSize),
         cursor: req.query.cursor as string | undefined,
         direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
         invoiceId: req.query.invoiceId ? String(req.query.invoiceId) : undefined,

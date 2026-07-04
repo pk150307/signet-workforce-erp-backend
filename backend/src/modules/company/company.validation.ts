@@ -1,4 +1,5 @@
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 
 export const updateProfileValidation = [
   body('companyName').notEmpty().isString().trim().isLength({ max: 300 }),
@@ -21,7 +22,7 @@ export const updateProfileValidation = [
 ];
 
 export const listCompanyValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
