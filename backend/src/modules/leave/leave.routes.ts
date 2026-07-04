@@ -6,6 +6,8 @@ import { sendId, sendNoContent, sendSuccess, validate } from '../../common/respo
 import {
   defaultSortFields,
   parseCursorPaginationQuery,
+  pageSizeQueryValidator,
+  parsePageSize,
   runCursorList,
 } from '../../types';
 import { LeaveStatus, LeaveType } from '../../types/enums';
@@ -19,14 +21,14 @@ router.use(authenticate);
 router.get(
   '/',
   validate([
-    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    pageSizeQueryValidator,
     query('cursor').optional().isString().trim(),
     query('direction').optional().isIn(['next', 'prev']),
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const pagination = parseCursorPaginationQuery({
-        pageSize: Number(req.query.pageSize) || 10,
+        pageSize: parsePageSize(req.query.pageSize),
         cursor: req.query.cursor as string | undefined,
         direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       });

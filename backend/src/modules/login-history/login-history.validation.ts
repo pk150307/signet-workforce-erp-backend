@@ -1,8 +1,9 @@
 import { query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 import { LOGIN_STATUS } from '../iam/iam.constants';
 
 export const listLoginHistoryValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('userId').optional().isUUID(),

@@ -1,8 +1,9 @@
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 import { DELETE_REQUEST_STATUS } from '../iam/iam.constants';
 
 export const listDeleteRequestsValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('status')

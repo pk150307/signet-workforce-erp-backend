@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendCreated, sendNoContent, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { designationGradeService } from './designation-grade.service';
+import { parsePageSize } from '../../types';
 import {
   CreateDesignationGradeInput,
   UpdateDesignationGradeInput,
@@ -10,7 +11,7 @@ import {
 export class DesignationGradeController {
   async list(req: Request, res: Response): Promise<void> {
     const result = await designationGradeService.list({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       clientId: req.query.clientId as string | undefined,

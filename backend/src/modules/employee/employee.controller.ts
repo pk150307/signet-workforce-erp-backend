@@ -9,6 +9,7 @@ import {
 } from './employee.constants';
 import { BulkImportRow } from './employee.types';
 import { respondWithFileDownload } from '../documents/document-download';
+import { parsePageSize } from '../../types';
 
 function parseEmployeeStatusQuery(
   value: unknown,
@@ -23,7 +24,7 @@ function parseEmployeeStatusQuery(
 export class EmployeeController {
   async getAll(req: Request, res: Response): Promise<void> {
     const result = await employeeService.getAll({
-      pageSize: Number(req.query.pageSize) || 10,
+      pageSize: parsePageSize(req.query.pageSize),
       cursor: req.query.cursor as string | undefined,
       direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       search: req.query.search as string | undefined,

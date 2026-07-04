@@ -1,4 +1,5 @@
 import { body, param, query } from 'express-validator';
+import { MAX_PAGE_SIZE, pageSizeQueryValidator } from '../../types';
 import {
   EMPLOYEE_DOCUMENT_TYPES,
   EmployeeLifecycleStatus,
@@ -9,7 +10,7 @@ import {
 const lifecycleValues = Object.values(EmployeeLifecycleStatus).filter((v) => typeof v === 'number');
 
 export const getEmployeesValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
@@ -30,7 +31,7 @@ export const getEmployeesValidation = [
 ];
 
 export const limitValidation = [
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('limit').optional().isInt({ min: 1, max: MAX_PAGE_SIZE }).toInt(),
 ];
 
 export const employeeIdValidation = [param('id').isUUID().withMessage('Valid employee ID is required')];
