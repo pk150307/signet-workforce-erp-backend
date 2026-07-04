@@ -46,8 +46,16 @@ export class ClientService {
     });
   }
 
-  listSites(clientId: string, page: number, pageSize: number) {
-    return siteRepository.findAll({ page, pageSize, clientId });
+  listSites(
+    clientId: string,
+    filter: {
+      pageSize: number;
+      cursor?: string | null;
+      direction?: 'next' | 'prev';
+      page?: number;
+    },
+  ) {
+    return siteRepository.findAll({ ...filter, clientId });
   }
 }
 

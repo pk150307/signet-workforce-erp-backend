@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import {
   BranchListItem,
   CompanyListFilter,
@@ -88,7 +92,8 @@ export class CompanyRepository {
     return this.mapProfile(rows[0]);
   }
 
-  async findBranches(filter: CompanyListFilter): Promise<PaginatedResult<BranchListItem>> {
+  async findBranches(filter: CompanyListFilter): Promise<CursorPaginatedResult<BranchListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT b.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -106,36 +111,32 @@ export class CompanyRepository {
       params.push(filter.isActive);
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM company_branches b WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT b.id, b.branch_code, b.branch_name, b.city, b.state, b.is_active,
+      selectSql: `SELECT b.id, b.branch_code, b.branch_name, b.city, b.state, b.is_active,
               0 AS head_count
-       FROM company_branches b
-       WHERE ${where}
-       ORDER BY b.branch_name
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    const items = rows.map((r) => ({
-      id: String(r.id),
-      branchCode: String(r.branch_code),
-      branchName: String(r.branch_name),
-      city: r.city ? String(r.city) : null,
-      state: r.state ? String(r.state) : null,
-      headCount: Number(r.head_count ?? 0),
-      isActive: Boolean(r.is_active),
-    }));
-
-    return createPaginatedResult(items, parseInt(count.rows[0].count, 10), filter.page, filter.pageSize);
+       FROM company_branches b`,
+      sortFields: [
+        { column: 'b.branch_name', key: 'branchName', direction: 'ASC' },
+        { column: 'b.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => ({
+        id: String(r.id),
+        branchCode: String(r.branch_code),
+        branchName: String(r.branch_name),
+        city: r.city ? String(r.city) : null,
+        state: r.state ? String(r.state) : null,
+        headCount: Number(r.head_count ?? 0),
+        isActive: Boolean(r.is_active),
+      }),
+    });
   }
 
-  async findOffices(filter: CompanyListFilter): Promise<PaginatedResult<OfficeListItem>> {
+  async findOffices(filter: CompanyListFilter): Promise<CursorPaginatedResult<OfficeListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT o.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -153,37 +154,29 @@ export class CompanyRepository {
       params.push(filter.isActive);
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM company_offices o
-       INNER JOIN company_branches b ON b.id = o.branch_id
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT o.id, o.office_code, o.office_name, o.floor, o.capacity, o.is_active,
+      selectSql: `SELECT o.id, o.office_code, o.office_name, o.floor, o.capacity, o.is_active,
               b.branch_name
        FROM company_offices o
-       INNER JOIN company_branches b ON b.id = o.branch_id
-       WHERE ${where}
-       ORDER BY o.office_name
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    const items = rows.map((r) => ({
-      id: String(r.id),
-      officeCode: String(r.office_code),
-      officeName: String(r.office_name),
-      branchName: String(r.branch_name),
-      floor: r.floor ? String(r.floor) : null,
-      capacity: Number(r.capacity ?? 0),
-      isActive: Boolean(r.is_active),
-    }));
-
-    return createPaginatedResult(items, parseInt(count.rows[0].count, 10), filter.page, filter.pageSize);
+       INNER JOIN company_branches b ON b.id = o.branch_id`,
+      sortFields: [
+        { column: 'o.office_name', key: 'officeName', direction: 'ASC' },
+        { column: 'o.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => ({
+        id: String(r.id),
+        officeCode: String(r.office_code),
+        officeName: String(r.office_name),
+        branchName: String(r.branch_name),
+        floor: r.floor ? String(r.floor) : null,
+        capacity: Number(r.capacity ?? 0),
+        isActive: Boolean(r.is_active),
+      }),
+    });
   }
 
   async softDeleteBranch(id: string, deletedBy: string): Promise<boolean> {

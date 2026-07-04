@@ -24,8 +24,10 @@ export interface AuditLogDetail extends AuditLogListItem {
 }
 
 export interface AuditLogFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   userId?: string;
   module?: string;
   action?: string;

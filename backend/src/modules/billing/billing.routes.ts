@@ -3,7 +3,10 @@ import { body, param, query } from 'express-validator';
 import { query as dbQuery } from '../../database/pool';
 import { authenticate } from '../../middleware/auth.middleware';
 import { sendId, sendSuccess, validate } from '../../common/response';
-import { createPaginatedResult } from '../../types';
+import {
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { InvoiceStatus } from '../../types/enums';
 import { formatDate, toNumber } from '../../utils/formatters';
 import { nextInvoiceNumber } from '../../utils/next-code';
@@ -34,8 +37,9 @@ router.use('/audit-logs', invoiceAuditRoutes);
 router.get(
   '/invoices',
   validate([
-    query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('cursor').optional().isString().trim(),
+    query('direction').optional().isIn(['next', 'prev']),
     query('clientId').optional().isUUID(),
     query('status').optional().isInt({ min: 1, max: 10 }).toInt(),
     query('month').optional().isInt({ min: 1, max: 12 }).toInt(),
@@ -44,8 +48,11 @@ router.get(
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const page = Number(req.query.page) || 1;
-      const pageSize = Number(req.query.pageSize) || 20;
+      const pagination = parseCursorPaginationQuery({
+        pageSize: Number(req.query.pageSize) || 10,
+        cursor: req.query.cursor as string | undefined,
+        direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
+      });
       const conditions = ['NOT i.is_deleted'];
       const params: unknown[] = [];
       let i = 1;
@@ -72,47 +79,40 @@ router.get(
         i++;
       }
 
-      const where = conditions.join(' AND ');
-      const count = await dbQuery<{ count: string }>(
-        `SELECT COUNT(*) AS count FROM invoices i
-         INNER JOIN clients c ON c.id = i.client_id WHERE ${where}`,
+      const result = await runCursorList({
+        queryFn: dbQuery,
+        pagination,
+        conditions,
         params,
-      );
-
-      const { rows } = await dbQuery<Record<string, unknown>>(
-        `SELECT i.id, i.invoice_number, c.company_name AS client_name, i.invoice_date,
+        selectSql: `SELECT i.id, i.invoice_number, c.company_name AS client_name, i.invoice_date,
                 i.due_date, i.sub_total, i.gst_amount, i.total_amount, i.paid_amount,
                 i.status, s.site_name, i.month, i.year
          FROM invoices i
          INNER JOIN clients c ON c.id = i.client_id
-         LEFT JOIN sites s ON s.id = i.site_id
-         WHERE ${where}
-         ORDER BY i.invoice_date DESC
-         LIMIT $${i} OFFSET $${i + 1}`,
-        [...params, pageSize, (page - 1) * pageSize],
-      );
+         LEFT JOIN sites s ON s.id = i.site_id`,
+        sortFields: [
+          { column: 'i.invoice_date', key: 'invoiceDate', direction: 'DESC' },
+          { column: 'i.id', key: 'id', direction: 'DESC' },
+        ],
+        mapRow: (r) => ({
+          id: String(r.id),
+          invoiceNumber: String(r.invoice_number),
+          clientName: String(r.client_name),
+          invoiceDate: formatDate(r.invoice_date as Date | string),
+          dueDate: formatDate(r.due_date as Date | string),
+          subTotal: toNumber(r.sub_total as string),
+          gstAmount: toNumber(r.gst_amount as string),
+          totalAmount: toNumber(r.total_amount as string),
+          paidAmount: toNumber(r.paid_amount as string),
+          balanceAmount: toNumber(r.total_amount as string) - toNumber(r.paid_amount as string),
+          status: Number(r.status) as InvoiceStatus,
+          siteName: r.site_name ? String(r.site_name) : null,
+          month: Number(r.month),
+          year: Number(r.year),
+        }),
+      });
 
-      const items = rows.map((r) => ({
-        id: String(r.id),
-        invoiceNumber: String(r.invoice_number),
-        clientName: String(r.client_name),
-        invoiceDate: formatDate(r.invoice_date as Date | string),
-        dueDate: formatDate(r.due_date as Date | string),
-        subTotal: toNumber(r.sub_total as string),
-        gstAmount: toNumber(r.gst_amount as string),
-        totalAmount: toNumber(r.total_amount as string),
-        paidAmount: toNumber(r.paid_amount as string),
-        balanceAmount: toNumber(r.total_amount as string) - toNumber(r.paid_amount as string),
-        status: Number(r.status) as InvoiceStatus,
-        siteName: r.site_name ? String(r.site_name) : null,
-        month: Number(r.month),
-        year: Number(r.year),
-      }));
-
-      sendSuccess(
-        res,
-        createPaginatedResult(items, parseInt(count.rows[0].count, 10), page, pageSize),
-      );
+      sendSuccess(res, result);
     } catch (e) {
       next(e);
     }
@@ -368,20 +368,21 @@ router.get(
   '/invoices/by-site/:siteId',
   validate([
     param('siteId').isUUID(),
-    query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('cursor').optional().isString().trim(),
+    query('direction').optional().isIn(['next', 'prev']),
     query('month').optional().isInt({ min: 1, max: 12 }).toInt(),
     query('year').optional().isInt({ min: 2000, max: 2100 }).toInt(),
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await billingService.getInvoicesBySite(
-        paramId(req, 'siteId'),
-        Number(req.query.page) || 1,
-        Number(req.query.pageSize) || 20,
-        req.query.month ? Number(req.query.month) : undefined,
-        req.query.year ? Number(req.query.year) : undefined,
-      );
+      const result = await billingService.getInvoicesBySite(paramId(req, 'siteId'), {
+        pageSize: Number(req.query.pageSize) || 10,
+        cursor: req.query.cursor as string | undefined,
+        direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
+        month: req.query.month ? Number(req.query.month) : undefined,
+        year: req.query.year ? Number(req.query.year) : undefined,
+      });
       sendSuccess(res, result);
     } catch (e) {
       next(e);
@@ -463,16 +464,17 @@ router.get(
   '/invoices/:invoiceId/audit-logs',
   validate([
     param('invoiceId').isUUID(),
-    query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('cursor').optional().isString().trim(),
+    query('direction').optional().isIn(['next', 'prev']),
   ]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await invoiceAuditService.listByInvoice(
-        paramId(req, 'invoiceId'),
-        Number(req.query.page) || 1,
-        Number(req.query.pageSize) || 20,
-      );
+      const result = await invoiceAuditService.listByInvoice(paramId(req, 'invoiceId'), {
+        pageSize: Number(req.query.pageSize) || 10,
+        cursor: req.query.cursor as string | undefined,
+        direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
+      });
       sendSuccess(res, result);
     } catch (e) {
       next(e);

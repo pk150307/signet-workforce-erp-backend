@@ -10,8 +10,9 @@ const router = Router();
 router.get(
   '/',
   validate([
-    query('page').optional().isInt({ min: 1 }).toInt(),
     query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    query('cursor').optional().isString().trim(),
+    query('direction').optional().isIn(['next', 'prev']),
     query('invoiceId').optional().isUUID(),
     query('clientId').optional().isUUID(),
     query('paymentMode').optional().isIn(PAYMENT_MODES),
@@ -22,8 +23,9 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await invoicePaymentService.list({
-        page: Number(req.query.page) || 1,
-        pageSize: Number(req.query.pageSize) || 20,
+        pageSize: Number(req.query.pageSize) || 10,
+        cursor: req.query.cursor as string | undefined,
+        direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
         invoiceId: req.query.invoiceId ? String(req.query.invoiceId) : undefined,
         clientId: req.query.clientId ? String(req.query.clientId) : undefined,
         paymentMode: req.query.paymentMode as typeof PAYMENT_MODES[number] | undefined,

@@ -44,8 +44,10 @@ export interface UpdateClientInput extends CreateClientInput {
 }
 
 export interface ClientFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   search?: string;
   isActive?: boolean;
 }

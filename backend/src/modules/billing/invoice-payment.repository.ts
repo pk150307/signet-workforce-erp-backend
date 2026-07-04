@@ -1,6 +1,10 @@
 import { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { formatDate, formatDateTime, round2, toNumber } from '../../utils/formatters';
 import {
   InvoicePaymentDto,
@@ -108,7 +112,8 @@ export class InvoicePaymentRepository {
     return row ? mapPayment(row) : null;
   }
 
-  async findAll(filter: InvoicePaymentFilter): Promise<PaginatedResult<InvoicePaymentDto>> {
+  async findAll(filter: InvoicePaymentFilter): Promise<CursorPaginatedResult<InvoicePaymentDto>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT p.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -141,32 +146,22 @@ export class InvoicePaymentRepository {
       i++;
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM invoice_payments p
-       INNER JOIN invoices i ON i.id = p.invoice_id
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT p.*, i.invoice_number, c.company_name AS client_name
+      selectSql: `SELECT p.*, i.invoice_number, c.company_name AS client_name
        FROM invoice_payments p
        INNER JOIN invoices i ON i.id = p.invoice_id
-       INNER JOIN clients c ON c.id = i.client_id
-       WHERE ${where}
-       ORDER BY p.payment_date DESC, p.created_at DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map(mapPayment),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       INNER JOIN clients c ON c.id = i.client_id`,
+      sortFields: [
+        { column: 'p.payment_date', key: 'paymentDate', direction: 'DESC' },
+        { column: 'p.created_at', key: 'createdAt', direction: 'DESC' },
+        { column: 'p.id', key: 'id', direction: 'DESC' },
+      ],
+      mapRow: mapPayment,
+    });
   }
 
   async updatePayment(

@@ -38,8 +38,10 @@ export interface UpdateInvoicePaymentInput {
 }
 
 export interface InvoicePaymentFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   invoiceId?: string;
   clientId?: string;
   paymentMode?: PaymentMode;

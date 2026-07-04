@@ -1,6 +1,11 @@
 import { PoolClient, QueryResultRow } from 'pg';
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  defaultSortFields,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { InvoiceStatus } from '../../types/enums';
 import { formatDateTime } from '../../utils/formatters';
 import {
@@ -73,7 +78,7 @@ function mapHistoryRow(row: Record<string, unknown>): InvoiceHistoryDto {
 }
 
 export class InvoiceAuditRepository {
-  private buildConditions(filter: InvoiceAuditFilter): { where: string; params: unknown[] } {
+  private buildConditions(filter: InvoiceAuditFilter): { conditions: string[]; params: unknown[] } {
     const conditions: string[] = [];
     const params: unknown[] = [];
     let idx = 1;
@@ -110,8 +115,7 @@ export class InvoiceAuditRepository {
       idx++;
     }
 
-    const where = conditions.length ? conditions.join(' AND ') : 'TRUE';
-    return { where, params };
+    return { conditions, params };
   }
 
   private baseSelect = `
@@ -149,32 +153,24 @@ export class InvoiceAuditRepository {
     await query(sql, params);
   }
 
-  async findAll(filter: InvoiceAuditFilter): Promise<PaginatedResult<InvoiceAuditLogDto>> {
-    const { where, params } = this.buildConditions(filter);
-    let idx = params.length + 1;
+  async findAll(filter: InvoiceAuditFilter): Promise<CursorPaginatedResult<InvoiceAuditLogDto>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { conditions, params } = this.buildConditions(filter);
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
+      params,
+      selectSql: `SELECT al.*, i.invoice_number, c.company_name AS client_name,
+           COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), u.full_name, u.username) AS user_name
        FROM invoice_audit_logs al
        INNER JOIN invoices i ON i.id = al.invoice_id
-       WHERE ${where}`,
-      params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `${this.baseSelect}
-       WHERE ${where}
-       ORDER BY al.created_at DESC
-       LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map(mapAuditRow),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       INNER JOIN clients c ON c.id = i.client_id
+       LEFT JOIN users u ON u.id = al.user_id`,
+      sortFields: defaultSortFields('al'),
+      mapRow: mapAuditRow,
+    });
   }
 
   async findById(id: string): Promise<InvoiceAuditLogDto | null> {
@@ -186,8 +182,11 @@ export class InvoiceAuditRepository {
     return row ? mapAuditRow(row) : null;
   }
 
-  async findByInvoiceId(invoiceId: string, page: number, pageSize: number) {
-    return this.findAll({ page, pageSize, invoiceId });
+  async findByInvoiceId(
+    invoiceId: string,
+    filter: Pick<InvoiceAuditFilter, 'pageSize' | 'cursor' | 'direction' | 'page'>,
+  ) {
+    return this.findAll({ ...filter, invoiceId });
   }
 
   async listActions(): Promise<string[]> {

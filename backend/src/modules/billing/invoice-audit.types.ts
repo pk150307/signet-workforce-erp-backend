@@ -39,8 +39,10 @@ export interface InvoiceActivityEntry {
 }
 
 export interface InvoiceAuditFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   invoiceId?: string;
   action?: string;
   createdBy?: string;

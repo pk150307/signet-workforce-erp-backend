@@ -38,8 +38,9 @@ const configurationBodyFields = [
 ];
 
 export const listBillingConfigurationsValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('clientId').optional().isUUID(),
   query('siteId').optional().isUUID(),
   query('isActive').optional().isBoolean().toBoolean(),

@@ -1,8 +1,9 @@
 import { body, param, query } from 'express-validator';
 
 export const listClientsValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
   query('isActive').optional().isBoolean().toBoolean(),
 ];
@@ -32,6 +33,7 @@ export const updateClientValidation = [...clientIdValidation, ...clientBodyField
 
 export const clientSitesValidation = [
   ...clientIdValidation,
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
 ];

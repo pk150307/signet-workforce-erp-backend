@@ -467,8 +467,18 @@ export class BillingService {
     return invoice;
   }
 
-  getInvoicesBySite(siteId: string, page: number, pageSize: number, month?: number, year?: number) {
-    return this.repo.findBySite(siteId, page, pageSize, month, year);
+  getInvoicesBySite(
+    siteId: string,
+    filter: {
+      pageSize: number;
+      cursor?: string | null;
+      direction?: 'next' | 'prev';
+      page?: number;
+      month?: number;
+      year?: number;
+    },
+  ) {
+    return this.repo.findBySite(siteId, filter);
   }
 
   async createSiteInvoice(input: CreateSiteInvoiceInput) {

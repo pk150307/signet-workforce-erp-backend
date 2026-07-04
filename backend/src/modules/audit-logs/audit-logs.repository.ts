@@ -1,5 +1,10 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  defaultSortFields,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import {
   AUDIT_LOG_EXPORT_HEADERS,
   AUDIT_LOG_EXPORT_MAX_ROWS,
@@ -37,7 +42,11 @@ function escapeCsv(value: unknown): string {
 }
 
 export class AuditLogsRepository {
-  private buildConditions(filter: AuditLogFilter): { where: string; params: unknown[] } {
+  private buildConditions(filter: AuditLogFilter): {
+    conditions: string[];
+    where: string;
+    params: unknown[];
+  } {
     const conditions = ['NOT al.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -88,7 +97,7 @@ export class AuditLogsRepository {
       i++;
     }
 
-    return { where: conditions.join(' AND '), params };
+    return { conditions, where: conditions.join(' AND '), params };
   }
 
   private mapListItem(r: Record<string, unknown>): AuditLogListItem {
@@ -121,34 +130,21 @@ export class AuditLogsRepository {
     };
   }
 
-  async findAll(filter: AuditLogFilter): Promise<PaginatedResult<AuditLogListItem>> {
-    const { where, params } = this.buildConditions(filter);
-    let i = params.length + 1;
+  async findAll(filter: AuditLogFilter): Promise<CursorPaginatedResult<AuditLogListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { conditions, params } = this.buildConditions(filter);
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM audit_logs al
-       LEFT JOIN users u ON u.id = al.user_id
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ${SELECT_FIELDS}
+      selectSql: `SELECT ${SELECT_FIELDS}
        FROM audit_logs al
-       LEFT JOIN users u ON u.id = al.user_id
-       WHERE ${where}
-       ORDER BY al.created_at DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       LEFT JOIN users u ON u.id = al.user_id`,
+      sortFields: defaultSortFields('al'),
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<AuditLogDetail | null> {
@@ -165,7 +161,6 @@ export class AuditLogsRepository {
 
   async getSummary(filter: Pick<AuditLogFilter, 'dateFrom' | 'dateTo' | 'module' | 'userId'>): Promise<AuditLogSummary> {
     const { where, params } = this.buildConditions({
-      page: 1,
       pageSize: 1,
       ...filter,
     });

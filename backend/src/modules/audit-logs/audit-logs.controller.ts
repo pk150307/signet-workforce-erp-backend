@@ -3,11 +3,14 @@ import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { auditLogsService } from './audit-logs.service';
 import { AuditLogFilter } from './audit-logs.types';
+import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
 
 function parseFilter(req: Request): AuditLogFilter {
+  const pagination = parseCursorPaginationQuery(req.query);
+  const { page, pageSize } = legacyOffsetFromCursor(pagination);
   return {
-    page: Number(req.query.page) || 1,
-    pageSize: Number(req.query.pageSize) || 20,
+    page,
+    pageSize,
     userId: req.query.userId as string | undefined,
     module: req.query.module as string | undefined,
     action: req.query.action as string | undefined,

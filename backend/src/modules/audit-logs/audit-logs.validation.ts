@@ -1,8 +1,9 @@
 import { param, query } from 'express-validator';
 
 export const listAuditLogsValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('userId').optional().isUUID(),
   query('module').optional().isString().trim().isLength({ max: 100 }),
   query('action').optional().isString().trim().isLength({ max: 100 }),

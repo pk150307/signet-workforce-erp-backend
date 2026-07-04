@@ -1,5 +1,10 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  buildCursorSql,
+  finalizeCursorPage,
+  parseCursorPaginationQuery,
+} from '../../types';
 import { InvoiceStatus, EmployeeStatus } from '../../types/enums';
 import { formatDate, formatDateTime, round2, toNumber } from '../../utils/formatters';
 import { nextInvoiceNumber } from '../../utils/next-code';
@@ -57,52 +62,70 @@ export class BillingRepository {
 
   async findBySite(
     siteId: string,
-    page: number,
-    pageSize: number,
-    month?: number,
-    year?: number,
-  ): Promise<PaginatedResult<InvoiceDetailDto>> {
+    filter: {
+      pageSize: number;
+      cursor?: string | null;
+      direction?: 'next' | 'prev';
+      page?: number;
+      month?: number;
+      year?: number;
+    },
+  ): Promise<CursorPaginatedResult<InvoiceDetailDto>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT i.is_deleted', 'i.site_id = $1'];
     const params: unknown[] = [siteId];
     let i = 2;
 
-    if (month) {
+    if (filter.month) {
       conditions.push(`i.month = $${i++}`);
-      params.push(month);
+      params.push(filter.month);
     }
-    if (year) {
+    if (filter.year) {
       conditions.push(`i.year = $${i++}`);
-      params.push(year);
+      params.push(filter.year);
+    }
+
+    const sortFields = [
+      { column: 'i.invoice_date', key: 'invoiceDate', direction: 'DESC' as const },
+      { column: 'i.id', key: 'id', direction: 'DESC' as const },
+    ];
+    const cursorSql = buildCursorSql(i, pagination, sortFields);
+    if (cursorSql.whereClause) {
+      conditions.push(cursorSql.whereClause);
+      params.push(...cursorSql.params);
+      i += cursorSql.params.length;
     }
 
     const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM invoices i WHERE ${where}`,
-      params,
-    );
-
     const { rows } = await query<Record<string, unknown>>(
       `SELECT i.*, c.company_name, c.id AS client_id, s.site_name, s.site_code
        FROM invoices i
        INNER JOIN clients c ON c.id = i.client_id
        LEFT JOIN sites s ON s.id = i.site_id
        WHERE ${where}
-       ORDER BY i.invoice_date DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, pageSize, (page - 1) * pageSize],
+       ORDER BY ${cursorSql.orderBy}
+       LIMIT $${i}`,
+      [...params, cursorSql.limit],
     );
 
-    const items: InvoiceDetailDto[] = [];
-    for (const row of rows) {
-      const { rows: lineItems } = await query<Record<string, unknown>>(
-        `SELECT id, description, quantity, unit_rate, hsn_sac_code
-         FROM invoice_line_items WHERE invoice_id = $1 AND NOT is_deleted ORDER BY sort_order`,
-        [row.id],
-      );
-      items.push(this.mapInvoiceDetail(row, lineItems, [], null));
-    }
+    const mapped = await Promise.all(
+      rows.map(async (row) => {
+        const { rows: lineItems } = await query<Record<string, unknown>>(
+          `SELECT id, description, quantity, unit_rate, hsn_sac_code
+           FROM invoice_line_items WHERE invoice_id = $1 AND NOT is_deleted ORDER BY sort_order`,
+          [row.id],
+        );
+        return { row, item: this.mapInvoiceDetail(row, lineItems, [], null) };
+      }),
+    );
 
-    return createPaginatedResult(items, parseInt(count.rows[0].count, 10), page, pageSize);
+    return finalizeCursorPage(
+      mapped,
+      pagination,
+      (entry) => entry.item,
+      sortFields,
+      { getCursorRow: (entry) => entry.row },
+    );
   }
 
   async createInvoice(data: {

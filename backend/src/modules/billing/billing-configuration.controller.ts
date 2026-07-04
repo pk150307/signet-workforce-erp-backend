@@ -10,8 +10,9 @@ import { paramId } from '../../utils/request';
 export class BillingConfigurationController {
   async list(req: Request, res: Response): Promise<void> {
     const result = await billingConfigurationService.list({
-      page: Number(req.query.page) || 1,
-      pageSize: Number(req.query.pageSize) || 20,
+      pageSize: Number(req.query.pageSize) || 10,
+      cursor: req.query.cursor as string | undefined,
+      direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       clientId: req.query.clientId as string | undefined,
       siteId: req.query.siteId as string | undefined,
       isActive:

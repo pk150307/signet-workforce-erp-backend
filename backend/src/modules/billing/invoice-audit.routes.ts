@@ -7,8 +7,9 @@ import { invoiceAuditService } from './invoice-audit.service';
 const router = Router();
 
 const listValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('invoiceId').optional().isUUID(),
   query('clientId').optional().isUUID(),
   query('action').optional().isString(),
@@ -43,8 +44,9 @@ router.get(
 router.get('/', validate(listValidation), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await invoiceAuditService.list({
-      page: Number(req.query.page) || 1,
-      pageSize: Number(req.query.pageSize) || 20,
+      pageSize: Number(req.query.pageSize) || 10,
+      cursor: req.query.cursor as string | undefined,
+      direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
       invoiceId: req.query.invoiceId ? String(req.query.invoiceId) : undefined,
       clientId: req.query.clientId ? String(req.query.clientId) : undefined,
       action: req.query.action ? String(req.query.action) : undefined,

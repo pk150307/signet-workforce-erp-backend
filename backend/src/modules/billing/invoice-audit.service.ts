@@ -17,9 +17,12 @@ export class InvoiceAuditService {
     return invoiceAuditRepository.listActions();
   }
 
-  async listByInvoice(invoiceId: string, page: number, pageSize: number) {
+  async listByInvoice(
+    invoiceId: string,
+    filter: Pick<InvoiceAuditFilter, 'pageSize' | 'cursor' | 'direction' | 'page'>,
+  ) {
     await this.assertInvoice(invoiceId);
-    return invoiceAuditRepository.findByInvoiceId(invoiceId, page, pageSize);
+    return invoiceAuditRepository.findByInvoiceId(invoiceId, filter);
   }
 
   async getHistory(invoiceId: string) {

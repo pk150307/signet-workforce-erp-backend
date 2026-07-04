@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { nextClientCode } from '../../utils/next-code';
 import {
   ClientDetail,
@@ -10,7 +14,8 @@ import {
 } from './client.types';
 
 export class ClientRepository {
-  async findAll(filter: ClientFilter): Promise<PaginatedResult<ClientListItem>> {
+  async findAll(filter: ClientFilter): Promise<CursorPaginatedResult<ClientListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT c.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -26,28 +31,21 @@ export class ClientRepository {
       params.push(filter.isActive);
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM clients c WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT c.id, c.client_code, c.company_name, c.contact_person, c.email, c.phone,
-              c.city, c.state, c.is_active,
+      selectSql: `SELECT c.id, c.client_code, c.company_name, c.contact_person, c.email, c.phone,
+              c.city, c.state, c.is_active, c.created_at,
               (SELECT COUNT(*) FROM sites s WHERE s.client_id = c.id AND NOT s.is_deleted) AS total_sites
-       FROM clients c WHERE ${where}
-       ORDER BY c.company_name
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       FROM clients c`,
+      sortFields: [
+        { column: 'c.company_name', key: 'companyName', direction: 'ASC' },
+        { column: 'c.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<ClientDetail | null> {

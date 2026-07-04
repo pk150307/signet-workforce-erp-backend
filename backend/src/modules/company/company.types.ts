@@ -61,8 +61,10 @@ export interface OfficeListItem {
 }
 
 export interface CompanyListFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   search?: string;
   isActive?: boolean;
 }

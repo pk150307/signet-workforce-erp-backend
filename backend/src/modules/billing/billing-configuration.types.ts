@@ -62,8 +62,10 @@ export interface BillingConfigurationDetail extends BillingConfigurationListItem
 }
 
 export interface BillingConfigurationFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   clientId?: string;
   siteId?: string;
   isActive?: boolean;

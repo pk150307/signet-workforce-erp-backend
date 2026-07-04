@@ -1,5 +1,9 @@
 import { query, withTransaction } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import {
   BillingComponentDto,
   BillingConfigurationComponentDto,
@@ -79,7 +83,8 @@ function mapComponentMaster(r: Record<string, unknown>): BillingComponentDto {
 }
 
 export class BillingConfigurationRepository {
-  async findAll(filter: BillingConfigurationFilter): Promise<PaginatedResult<BillingConfigurationListItem>> {
+  async findAll(filter: BillingConfigurationFilter): Promise<CursorPaginatedResult<BillingConfigurationListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT bc.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -107,35 +112,23 @@ export class BillingConfigurationRepository {
       i++;
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM billing_configurations bc
-       INNER JOIN clients c ON c.id = bc.client_id AND NOT c.is_deleted
-       INNER JOIN sites s ON s.id = bc.site_id AND NOT s.is_deleted
-       LEFT JOIN contracts ct ON ct.id = bc.contract_id AND NOT ct.is_deleted
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ${LIST_SELECT}
+      selectSql: `SELECT ${LIST_SELECT}
        FROM billing_configurations bc
        INNER JOIN clients c ON c.id = bc.client_id AND NOT c.is_deleted
        INNER JOIN sites s ON s.id = bc.site_id AND NOT s.is_deleted
-       LEFT JOIN contracts ct ON ct.id = bc.contract_id AND NOT ct.is_deleted
-       WHERE ${where}
-       ORDER BY c.company_name, s.site_name
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map(mapListRow),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       LEFT JOIN contracts ct ON ct.id = bc.contract_id AND NOT ct.is_deleted`,
+      sortFields: [
+        { column: 'c.company_name', key: 'clientName', direction: 'ASC' },
+        { column: 's.site_name', key: 'siteName', direction: 'ASC' },
+        { column: 'bc.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: mapListRow,
+    });
   }
 
   async findById(id: string): Promise<BillingConfigurationDetail | null> {
