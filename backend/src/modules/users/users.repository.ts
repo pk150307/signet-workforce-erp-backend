@@ -1,5 +1,11 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  buildCursorSql,
+  defaultSortFields,
+  finalizeCursorPage,
+  parseCursorPaginationQuery,
+} from '../../types';
 import { USER_STATUS } from '../iam/iam.constants';
 import {
   CreateUserInput,
@@ -21,7 +27,8 @@ const USER_SELECT = `
 `;
 
 export class UsersRepository {
-  async findAll(filter: UserFilter): Promise<PaginatedResult<UserListItem>> {
+  async findAll(filter: UserFilter): Promise<CursorPaginatedResult<UserListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT u.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -62,12 +69,15 @@ export class UsersRepository {
       i++;
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(DISTINCT u.id) AS count FROM users u WHERE ${where}`,
-      params,
-    );
+    const sortFields = defaultSortFields('u');
+    const cursorSql = buildCursorSql(i, pagination, sortFields);
+    if (cursorSql.whereClause) {
+      conditions.push(cursorSql.whereClause);
+      params.push(...cursorSql.params);
+      i += cursorSql.params.length;
+    }
 
+    const where = conditions.join(' AND ');
     const { rows } = await query<Record<string, unknown>>(
       `SELECT ${USER_SELECT},
               COALESCE(
@@ -81,17 +91,12 @@ export class UsersRepository {
        LEFT JOIN roles r ON r.id = ur.role_id
        WHERE ${where}
        GROUP BY u.id, d.name, e.employee_code
-       ORDER BY u.created_at DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
+       ORDER BY ${cursorSql.orderBy}
+       LIMIT $${i}`,
+      [...params, cursorSql.limit],
     );
 
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+    return finalizeCursorPage(rows, pagination, (r) => this.mapListItem(r), sortFields);
   }
 
   async findById(id: string): Promise<UserDetail | null> {

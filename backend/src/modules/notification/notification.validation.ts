@@ -2,8 +2,9 @@ import { param, query } from 'express-validator';
 import { NOTIFICATION_PRIORITY, NOTIFICATION_TYPE } from '../iam/iam.constants';
 
 export const listNotificationsValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('unreadOnly').optional().isIn(['true', 'false']),
   query('notificationType')
     .optional()

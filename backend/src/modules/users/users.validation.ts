@@ -3,8 +3,9 @@ import { LOGIN_STATUS } from '../iam/iam.constants';
 import { validatePasswordPolicy } from '../../utils/password-policy';
 
 export const listUsersValidation = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
   query('isActive').optional().isBoolean().toBoolean(),
   query('status').optional().isString().trim(),
@@ -16,8 +17,9 @@ export const userIdValidation = [param('id').isUUID().withMessage('Valid user id
 
 export const loginHistoryValidation = [
   ...userIdValidation,
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('loginStatus')
     .optional()
     .isIn([LOGIN_STATUS.SUCCESS, LOGIN_STATUS.FAILED, LOGIN_STATUS.LOCKED, LOGIN_STATUS.LOGOUT]),

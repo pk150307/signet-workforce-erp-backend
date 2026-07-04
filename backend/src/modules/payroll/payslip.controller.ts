@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { payslipService } from './payslip.service';
 import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
 
 export class PayslipController {
   async generate(req: Request, res: Response): Promise<void> {
@@ -17,9 +18,11 @@ export class PayslipController {
   }
 
   async list(req: Request, res: Response): Promise<void> {
+    const pagination = parseCursorPaginationQuery(req.query);
+    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await payslipService.list({
-      page: Number(req.query.page) || 1,
-      pageSize: Number(req.query.pageSize) || 20,
+      page,
+      pageSize,
       month: req.query.month ? Number(req.query.month) : undefined,
       year: req.query.year ? Number(req.query.year) : undefined,
       employeeId: req.query.employeeId as string | undefined,

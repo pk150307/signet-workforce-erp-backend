@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import {
   GeneratePayslipsInput,
   PayslipFilter,
@@ -113,7 +117,8 @@ export class PayslipRepository {
     return generated;
   }
 
-  async findAll(filter: PayslipFilter): Promise<PaginatedResult<PayslipListItem>> {
+  async findAll(filter: PayslipFilter): Promise<CursorPaginatedResult<PayslipListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT ss.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -152,34 +157,26 @@ export class PayslipRepository {
       params.push(normalizePayslipStatus(filter.status));
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count
-       FROM salary_slips ss
-       INNER JOIN employees e ON e.id = ss.employee_id
-       INNER JOIN departments d ON d.id = e.department_id
-       LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
-       LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
-       WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ss.*, e.employee_code, e.first_name, e.last_name, d.name AS department_name, des.name AS designation_name
+      selectSql: `SELECT ss.*, e.employee_code, e.first_name, e.last_name, d.name AS department_name, des.name AS designation_name
        FROM salary_slips ss
        INNER JOIN employees e ON e.id = ss.employee_id
        INNER JOIN departments d ON d.id = e.department_id
        INNER JOIN designations des ON des.id = e.designation_id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
-       LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
-       WHERE ${where}
-       ORDER BY ss.year DESC, ss.month DESC, e.employee_code
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    const items = rows.map((r) => this.mapListItem(r));
-    return createPaginatedResult(items, parseInt(count.rows[0].count, 10), filter.page, filter.pageSize);
+       LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)`,
+      sortFields: [
+        { column: 'ss.year', key: 'year', direction: 'DESC' },
+        { column: 'ss.month', key: 'month', direction: 'DESC' },
+        { column: 'e.employee_code', key: 'employeeCode', direction: 'ASC' },
+        { column: 'ss.id', key: 'id', direction: 'DESC' },
+      ],
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<PayslipPrintData | null> {

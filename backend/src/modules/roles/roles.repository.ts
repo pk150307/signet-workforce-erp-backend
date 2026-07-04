@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { permissionKey } from './roles.permissions';
 import {
   CreateRoleInput,
@@ -13,7 +17,8 @@ import {
 } from './roles.types';
 
 export class RolesRepository {
-  async findAll(filter: RoleFilter): Promise<PaginatedResult<RoleListItem>> {
+  async findAll(filter: RoleFilter): Promise<CursorPaginatedResult<RoleListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
     const conditions = ['NOT r.is_deleted'];
     const params: unknown[] = [];
     let i = 1;
@@ -34,33 +39,26 @@ export class RolesRepository {
       params.push(filter.isSystem);
     }
 
-    const where = conditions.join(' AND ');
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM roles r WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT r.id, r.name, r.description, r.is_system, r.is_active, r.status,
+      selectSql: `SELECT r.id, r.name, r.description, r.is_system, r.is_active, r.status,
               r.created_at, r.created_by,
               (SELECT COUNT(*)::int FROM role_permissions rp
                WHERE rp.role_id = r.id AND NOT rp.is_deleted) AS permission_count,
               (SELECT COUNT(DISTINCT ur.user_id)::int FROM user_roles ur
                INNER JOIN users u ON u.id = ur.user_id AND NOT u.is_deleted
                WHERE ur.role_id = r.id AND NOT ur.is_deleted) AS user_count
-       FROM roles r
-       WHERE ${where}
-       ORDER BY r.is_system DESC, r.name ASC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       FROM roles r`,
+      sortFields: [
+        { column: 'r.is_system', key: 'isSystem', direction: 'DESC' },
+        { column: 'r.name', key: 'name', direction: 'ASC' },
+        { column: 'r.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<RoleDetail | null> {

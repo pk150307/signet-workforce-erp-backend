@@ -1,8 +1,9 @@
 import { body, param, query } from 'express-validator';
 
 const pfEsicQueryFields = [
-  query('page').optional().isInt({ min: 1 }).toInt(),
   query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('cursor').optional().isString().trim(),
+  query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString(),
   query('siteId').optional().isUUID(),
   query('clientId').optional().isUUID(),

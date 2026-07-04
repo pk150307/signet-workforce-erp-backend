@@ -18,8 +18,9 @@ function parseEmployeeStatusFilter(value: unknown): StatutoryFilter['employeeSta
 
 export function parseStatutoryFilter(req: Request): StatutoryFilter {
   return {
-    page: Number(req.query.page) || 1,
-    pageSize: Number(req.query.pageSize) || 20,
+    pageSize: Number(req.query.pageSize) || 10,
+    cursor: req.query.cursor as string | undefined,
+    direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
     search: req.query.search as string | undefined,
     siteId: req.query.siteId as string | undefined,
     clientId: req.query.clientId as string | undefined,

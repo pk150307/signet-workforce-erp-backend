@@ -89,8 +89,10 @@ export interface GeneratePayslipsInput {
 }
 
 export interface PayslipFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   month?: number;
   year?: number;
   employeeId?: string;

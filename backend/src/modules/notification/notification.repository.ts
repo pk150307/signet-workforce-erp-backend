@@ -1,5 +1,10 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  defaultSortFields,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { NOTIFICATION_PRIORITY } from '../iam/iam.constants';
 import {
   CreateNotificationInput,
@@ -16,7 +21,7 @@ const SELECT_FIELDS = `
 `;
 
 export class NotificationRepository {
-  private buildConditions(filter: NotificationFilter): { where: string; params: unknown[] } {
+  private buildConditions(filter: NotificationFilter): { conditions: string[]; params: unknown[] } {
     const conditions = ['NOT n.is_deleted', 'n.user_id = $1'];
     const params: unknown[] = [filter.userId];
     let i = 2;
@@ -56,7 +61,7 @@ export class NotificationRepository {
       i++;
     }
 
-    return { where: conditions.join(' AND '), params };
+    return { conditions, params };
   }
 
   private mapListItem(r: Record<string, unknown>): NotificationListItem {
@@ -84,30 +89,19 @@ export class NotificationRepository {
     };
   }
 
-  async findAll(filter: NotificationFilter): Promise<PaginatedResult<NotificationListItem>> {
-    const { where, params } = this.buildConditions(filter);
-    let i = params.length + 1;
+  async findAll(filter: NotificationFilter): Promise<CursorPaginatedResult<NotificationListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { conditions, params } = this.buildConditions(filter);
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM notifications n WHERE ${where}`,
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT ${SELECT_FIELDS}
-       FROM notifications n
-       WHERE ${where}
-       ORDER BY n.created_at DESC
-       LIMIT $${i} OFFSET $${i + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+      selectSql: `SELECT ${SELECT_FIELDS} FROM notifications n`,
+      sortFields: defaultSortFields('n'),
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string, userId: string): Promise<NotificationDetail | null> {

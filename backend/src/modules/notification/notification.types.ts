@@ -19,8 +19,10 @@ export interface NotificationDetail extends NotificationListItem {
 }
 
 export interface NotificationFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   userId: string;
   unreadOnly?: boolean;
   notificationType?: string;

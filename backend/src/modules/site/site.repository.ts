@@ -1,5 +1,9 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  parseCursorPaginationQuery,
+  runCursorList,
+} from '../../types';
 import { nextSiteCode } from '../../utils/next-code';
 import {
   CreateSiteInput,
@@ -27,30 +31,46 @@ export class SiteRepository {
     WHERE NOT s.is_deleted
   `;
 
-  async findAll(filter: SiteFilter): Promise<PaginatedResult<SiteListItem>> {
-    const { extra, params, nextIndex } = this.buildFilter(filter);
+  async findAll(filter: SiteFilter): Promise<CursorPaginatedResult<SiteListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const conditions = ['NOT s.is_deleted'];
+    const params: unknown[] = [];
+    let i = 1;
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count ${this.baseFrom}${extra}`,
+    if (filter.search) {
+      conditions.push(
+        `(LOWER(s.site_name) LIKE $${i} OR LOWER(s.site_code) LIKE $${i} OR LOWER(c.company_name) LIKE $${i})`,
+      );
+      params.push(`%${filter.search.toLowerCase()}%`);
+      i++;
+    }
+
+    if (filter.clientId) {
+      conditions.push(`s.client_id = $${i++}::uuid`);
+      params.push(filter.clientId);
+    }
+
+    if (filter.isActive !== undefined) {
+      conditions.push(`s.is_active = $${i++}`);
+      params.push(filter.isActive);
+    }
+
+    return runCursorList({
+      queryFn: query,
+      pagination,
+      conditions,
       params,
-    );
-
-    const { rows } = await query<Record<string, unknown>>(
-      `SELECT s.id, s.site_code, s.site_name, s.client_id, c.company_name AS client_company_name,
+      selectSql: `SELECT s.id, s.site_code, s.site_name, s.client_id, c.company_name AS client_company_name,
               s.city, s.state, s.required_headcount, s.is_active,
               ${DEPLOYED_COUNT_SQL} AS deployed_headcount
-       ${this.baseFrom}${extra}
-       ORDER BY s.site_name
-       LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
-    );
-
-    return createPaginatedResult(
-      rows.map((r) => this.mapListItem(r)),
-      parseInt(count.rows[0].count, 10),
-      filter.page,
-      filter.pageSize,
-    );
+       FROM sites s
+       INNER JOIN clients c ON c.id = s.client_id AND NOT c.is_deleted`,
+      sortFields: [
+        { column: 's.site_name', key: 'siteName', direction: 'ASC' },
+        { column: 's.id', key: 'id', direction: 'ASC' },
+      ],
+      mapRow: (r) => this.mapListItem(r),
+    });
   }
 
   async findById(id: string): Promise<SiteDetail | null> {
@@ -175,33 +195,6 @@ export class SiteRepository {
       [siteId],
     );
     return rows[0]?.client_id ?? null;
-  }
-
-  private buildFilter(filter: SiteFilter): { extra: string; params: unknown[]; nextIndex: number } {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    let i = 1;
-
-    if (filter.search) {
-      conditions.push(
-        `(LOWER(s.site_name) LIKE $${i} OR LOWER(s.site_code) LIKE $${i} OR LOWER(c.company_name) LIKE $${i})`,
-      );
-      params.push(`%${filter.search.toLowerCase()}%`);
-      i++;
-    }
-
-    if (filter.clientId) {
-      conditions.push(`s.client_id = $${i++}::uuid`);
-      params.push(filter.clientId);
-    }
-
-    if (filter.isActive !== undefined) {
-      conditions.push(`s.is_active = $${i++}`);
-      params.push(filter.isActive);
-    }
-
-    const extra = conditions.length ? ` AND ${conditions.join(' AND ')}` : '';
-    return { extra, params, nextIndex: i };
   }
 
   private mapListItem(r: Record<string, unknown>): SiteListItem {

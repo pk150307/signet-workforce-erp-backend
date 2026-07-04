@@ -33,8 +33,10 @@ export interface UserDetail extends UserListItem {
 }
 
 export interface UserFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   search?: string;
   isActive?: boolean;
   roleId?: string;

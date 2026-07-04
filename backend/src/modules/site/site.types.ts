@@ -53,8 +53,10 @@ export interface UpdateSiteInput extends CreateSiteInput {
 }
 
 export interface SiteFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   search?: string;
   clientId?: string;
   isActive?: boolean;

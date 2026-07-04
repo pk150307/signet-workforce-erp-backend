@@ -1,5 +1,11 @@
 import { query } from '../../database/pool';
-import { createPaginatedResult, PaginatedResult } from '../../types';
+import {
+  CursorPaginatedResult,
+  CursorSortField,
+  buildCursorSql,
+  finalizeCursorPage,
+  parseCursorPaginationQuery,
+} from '../../types';
 import { PfEsicDetail, PfEsicListItem, PfEsicStatus, PF_ESIC_EXPORT_HEADERS, StatutoryFilter, UpsertPfEsicInput } from './statutory.types';
 import { formatDate } from '../../utils/formatters';
 import { EmployeeLifecycleStatus } from '../employee/employee.constants';
@@ -25,7 +31,9 @@ export class StatutoryRepository {
            COALESCE(esd.esi_number, e.esi_number) AS esi_number,
            COALESCE(esd.is_pf_applicable, TRUE) AS is_pf_applicable,
            COALESCE(esd.is_esi_applicable, TRUE) AS is_esi_applicable,
-           esd.pf_joining_date, esd.esi_joining_date, esd.status, esd.id AS statutory_id
+           esd.pf_joining_date, esd.esi_joining_date,
+           COALESCE(esd.status, 'Active') AS status, esd.id AS statutory_id,
+           COALESCE(esd.pf_joining_date, esd.esi_joining_date) AS effective_date
   `;
 
   private buildFilter(filter: StatutoryFilter): { extra: string; params: unknown[]; nextIndex: number } {
@@ -110,46 +118,54 @@ export class StatutoryRepository {
   }
 
   private buildOrderBy(sortBy?: string, sortDir?: 'asc' | 'desc'): string {
-    const direction = sortDir === 'desc' ? 'DESC' : 'ASC';
-    const columns: Record<string, string> = {
-      employeeCode: 'e.employee_code',
-      fullName: `e.first_name || ' ' || e.last_name`,
-      department: 'd.name',
-      clientCompanyName: 'c.company_name',
-      aadhaarNumber: 'e.aadhaar_number',
-      uanNumber: 'COALESCE(esd.uan_number, e.uan_number)',
-      pfNumber: 'COALESCE(esd.pf_number, e.pf_number)',
-      esicNumber: 'COALESCE(esd.esi_number, e.esi_number)',
-      status: `CASE
-        WHEN LOWER(COALESCE(esd.status, '')) = 'inactive' THEN 'Inactive'
-        WHEN LOWER(COALESCE(esd.status, '')) = 'pending' THEN 'Pending'
-        WHEN LOWER(COALESCE(esd.status, '')) = 'suspended' THEN 'Suspended'
-        ELSE 'Active'
-      END`,
-      effectiveDate: 'COALESCE(esd.pf_joining_date, esd.esi_joining_date)',
-    };
-    const column = columns[sortBy ?? 'fullName'] ?? columns.fullName;
-    return `${column} ${direction}, e.employee_code ASC`;
+    const sortFields = this.buildSortFields(sortBy, sortDir);
+    return sortFields.map((f) => `${f.column} ${f.direction ?? 'ASC'}`).join(', ');
   }
 
-  async findAll(filter: StatutoryFilter): Promise<PaginatedResult<PfEsicListItem>> {
-    const { extra, params, nextIndex } = this.buildFilter(filter);
+  private buildSortFields(sortBy?: string, sortDir?: 'asc' | 'desc'): CursorSortField[] {
+    const direction: 'ASC' | 'DESC' = sortDir === 'desc' ? 'DESC' : 'ASC';
+    const primary: Record<string, CursorSortField[]> = {
+      employeeCode: [{ column: 'e.employee_code', key: 'employeeCode', direction }],
+      fullName: [
+        { column: 'e.first_name', key: 'firstName', direction },
+        { column: 'e.last_name', key: 'lastName', direction },
+      ],
+      department: [{ column: 'd.name', key: 'departmentName', direction }],
+      clientCompanyName: [{ column: 'c.company_name', key: 'clientCompanyName', direction }],
+      aadhaarNumber: [{ column: 'e.aadhaar_number', key: 'aadhaarNumber', direction }],
+      uanNumber: [{ column: 'COALESCE(esd.uan_number, e.uan_number)', key: 'uanNumber', direction }],
+      pfNumber: [{ column: 'COALESCE(esd.pf_number, e.pf_number)', key: 'pfNumber', direction }],
+      esicNumber: [{ column: 'COALESCE(esd.esi_number, e.esi_number)', key: 'esicNumber', direction }],
+      status: [{ column: "COALESCE(esd.status, 'Active')", key: 'status', direction }],
+      effectiveDate: [
+        { column: 'COALESCE(esd.pf_joining_date, esd.esi_joining_date)', key: 'effectiveDate', direction },
+      ],
+    };
+    const fields = [...(primary[sortBy ?? 'fullName'] ?? primary.fullName)];
+    if (!fields.some((f) => f.key === 'employeeCode')) {
+      fields.push({ column: 'e.employee_code', key: 'employeeCode', direction: 'ASC' });
+    }
+    fields.push({ column: 'e.id', key: 'id', direction: 'ASC' });
+    return fields;
+  }
 
-    const count = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count ${this.baseJoin}${extra}`,
-      params,
-    );
+  async findAll(filter: StatutoryFilter): Promise<CursorPaginatedResult<PfEsicListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const { extra, params, nextIndex } = this.buildFilter(filter);
+    const sortFields = this.buildSortFields(filter.sortBy, filter.sortDir);
+    const cursorSql = buildCursorSql(nextIndex, pagination, sortFields);
+    const cursorExtra = cursorSql.whereClause ? ` AND ${cursorSql.whereClause}` : '';
+    const allParams = [...params, ...cursorSql.params];
 
     const { rows } = await query<Record<string, unknown>>(
       `${this.listSelect}
-       ${this.baseJoin}${extra}
-       ORDER BY ${this.buildOrderBy(filter.sortBy, filter.sortDir)}
-       LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
-      [...params, filter.pageSize, (filter.page - 1) * filter.pageSize],
+       ${this.baseJoin}${extra}${cursorExtra}
+       ORDER BY ${cursorSql.orderBy}
+       LIMIT $${allParams.length + 1}`,
+      [...allParams, cursorSql.limit],
     );
 
-    const items = rows.map((r) => this.mapListItem(r));
-    return createPaginatedResult(items, parseInt(count.rows[0].count, 10), filter.page, filter.pageSize);
+    return finalizeCursorPage(rows, pagination, (r) => this.mapListItem(r), sortFields);
   }
 
   async exportCsv(filter: StatutoryFilter): Promise<string> {

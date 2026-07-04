@@ -33,8 +33,10 @@ export interface RoleDetail extends RoleListItem {
 }
 
 export interface RoleFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   search?: string;
   isActive?: boolean;
   isSystem?: boolean;

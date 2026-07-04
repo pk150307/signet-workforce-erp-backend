@@ -81,8 +81,10 @@ export interface UpsertPfEsicInput {
 }
 
 export interface StatutoryFilter {
-  page: number;
   pageSize: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
+  page?: number;
   search?: string;
   siteId?: string;
   clientId?: string;
