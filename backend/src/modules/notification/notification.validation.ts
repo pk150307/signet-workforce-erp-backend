@@ -1,8 +1,9 @@
 import { param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 import { NOTIFICATION_PRIORITY, NOTIFICATION_TYPE } from '../iam/iam.constants';
 
 export const listNotificationsValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('unreadOnly').optional().isIn(['true', 'false']),

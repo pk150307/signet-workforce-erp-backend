@@ -1,6 +1,7 @@
 import { Request } from 'express';
 import { StatutoryFilter, PfEsicStatus } from './statutory.types';
 import { EmployeeLifecycleStatus } from '../employee/employee.constants';
+import { parsePageSize } from '../../types';
 
 function parseOptionalBool(value: unknown): boolean | undefined {
   if (value === 'true' || value === true) return true;
@@ -18,7 +19,7 @@ function parseEmployeeStatusFilter(value: unknown): StatutoryFilter['employeeSta
 
 export function parseStatutoryFilter(req: Request): StatutoryFilter {
   return {
-    pageSize: Number(req.query.pageSize) || 10,
+    pageSize: parsePageSize(req.query.pageSize),
     cursor: req.query.cursor as string | undefined,
     direction: (req.query.direction as 'next' | 'prev' | undefined) ?? 'next',
     search: req.query.search as string | undefined,

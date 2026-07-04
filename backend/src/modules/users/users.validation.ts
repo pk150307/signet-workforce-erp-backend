@@ -1,9 +1,10 @@
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 import { LOGIN_STATUS } from '../iam/iam.constants';
 import { validatePasswordPolicy } from '../../utils/password-policy';
 
 export const listUsersValidation = [
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('search').optional().isString().trim(),
@@ -17,7 +18,7 @@ export const userIdValidation = [param('id').isUUID().withMessage('Valid user id
 
 export const loginHistoryValidation = [
   ...userIdValidation,
-  query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+  pageSizeQueryValidator,
   query('cursor').optional().isString().trim(),
   query('direction').optional().isIn(['next', 'prev']),
   query('loginStatus')

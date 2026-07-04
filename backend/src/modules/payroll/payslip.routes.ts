@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { body, param, query } from 'express-validator';
+import { pageSizeQueryValidator } from '../../types';
 import { payslipController } from './payslip.controller';
 import { validate } from '../../common/response';
 import { authenticate } from '../../middleware/auth.middleware';
@@ -11,7 +12,7 @@ router.use(authenticate);
 router.get(
   '/',
   validate([
-    query('pageSize').optional().isInt({ min: 1, max: 100 }).toInt(),
+    pageSizeQueryValidator,
     query('cursor').optional().isString().trim(),
     query('direction').optional().isIn(['next', 'prev']),
     query('month').optional().isInt({ min: 1, max: 12 }).toInt(),
