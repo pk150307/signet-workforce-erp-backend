@@ -13,6 +13,8 @@ import {
   AuditLogListItem,
   AuditLogSummary,
 } from './audit-logs.types';
+import { buildExcelBuffer } from '../../utils/excel-export';
+import { buildPdfTableBuffer } from '../../utils/pdf-export';
 
 const SELECT_FIELDS = `
   al.id, al.user_id, al.module, al.action, al.entity_type, al.entity_id,
@@ -34,11 +36,6 @@ function parseJson(value: unknown): Record<string, unknown> | null {
     }
   }
   return null;
-}
-
-function escapeCsv(value: unknown): string {
-  const str = value == null ? '' : String(value);
-  return `"${str.replace(/"/g, '""')}"`;
 }
 
 export class AuditLogsRepository {
@@ -218,7 +215,10 @@ export class AuditLogsRepository {
     };
   }
 
-  async exportCsv(filter: AuditLogFilter): Promise<string> {
+  async exportCsv(
+    filter: AuditLogFilter,
+    format: 'excel' | 'pdf' = 'excel',
+  ): Promise<Buffer> {
     const { where, params } = this.buildConditions(filter);
 
     const { rows } = await query<Record<string, unknown>>(
@@ -231,29 +231,33 @@ export class AuditLogsRepository {
       params,
     );
 
-    const lines = [AUDIT_LOG_EXPORT_HEADERS.join(',')];
-    for (const r of rows) {
+    const dataRows = rows.map((r) => {
       const item = this.mapListItem(r);
-      lines.push(
-        [
-          item.createdAt,
-          item.userName ?? '',
-          item.userEmail ?? '',
-          item.module ?? '',
-          item.action,
-          item.entityType,
-          item.entityId ?? '',
-          item.ipAddress ?? '',
-          item.browser ?? '',
-          item.operatingSystem ?? '',
-          item.createdBy,
-        ]
-          .map(escapeCsv)
-          .join(','),
-      );
+      return [
+        item.createdAt,
+        item.userName ?? '',
+        item.userEmail ?? '',
+        item.module ?? '',
+        item.action,
+        item.entityType,
+        item.entityId ?? '',
+        item.ipAddress ?? '',
+        item.browser ?? '',
+        item.operatingSystem ?? '',
+        item.createdBy,
+      ];
+    });
+
+    if (format === 'pdf') {
+      return buildPdfTableBuffer({
+        title: 'Audit Logs',
+        headers: [...AUDIT_LOG_EXPORT_HEADERS],
+        rows: dataRows,
+        landscape: true,
+      });
     }
 
-    return lines.join('\n');
+    return buildExcelBuffer('Audit Logs', [...AUDIT_LOG_EXPORT_HEADERS], dataRows);
   }
 }
 

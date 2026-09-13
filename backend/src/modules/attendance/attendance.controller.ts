@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { attendanceService } from './attendance.service';
 import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { parseCursorPaginationQuery } from '../../types';
 
 function periodFromQuery(req: Request) {
   return {
@@ -15,13 +16,17 @@ function actor(req: Request) {
   return req.user?.username ?? 'System';
 }
 
-function workbookFilename(month: number, year: number, suffix: string) {
-  return `attendance-${suffix}-${year}-${String(month).padStart(2, '0')}.xlsx`;
+function workbookFilename(month: number, year: number, suffix: string, ext = 'xlsx') {
+  return `attendance-${suffix}-${year}-${String(month).padStart(2, '0')}.${ext}`;
 }
 
 export class AttendanceController {
   async employeeList(req: Request, res: Response) {
-    const result = await attendanceService.getEmployeeList(periodFromQuery(req));
+    const pagination = parseCursorPaginationQuery(req.query);
+    const result = await attendanceService.getEmployeeList({
+      ...periodFromQuery(req),
+      ...pagination,
+    });
     sendSuccess(res, result);
   }
 
@@ -44,26 +49,37 @@ export class AttendanceController {
 
   async submitEmployeeRow(req: Request, res: Response) {
     const employeeId = paramId(req, 'employeeId');
-    const { clientId, month, year, cells, overtimeHours, nightAllowance, punctualityAward } = req.body as {
+    const {
+      clientId,
+      month,
+      year,
+      presentDays,
+      overtimeHours,
+      nightAllowance,
+      punctualityAward,
+      bonus,
+    } = req.body as {
       clientId: string;
       month: number;
       year: number;
-      cells: Array<{ date: string; status: number | null }>;
+      presentDays: number;
       overtimeHours?: number;
       nightAllowance?: number;
       punctualityAward?: number;
+      bonus?: number;
     };
     const result = await attendanceService.submitEmployeeRow(
       clientId,
       month,
       year,
       employeeId,
-      cells,
       actor(req),
       {
+        presentDays: Number(presentDays),
         overtimeHours: overtimeHours ?? 0,
         nightAllowance: nightAllowance ?? 0,
         punctualityAward: punctualityAward ?? 0,
+        bonus: bonus ?? 0,
       },
     );
     sendSuccess(res, result);
@@ -95,20 +111,30 @@ export class AttendanceController {
 
   async exportRegister(req: Request, res: Response) {
     const p = periodFromQuery(req);
+    const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
     const buffer = await attendanceService.exportRegister(
       p.clientId,
       p.month,
       p.year,
       actor(req),
+      format,
     );
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    );
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${workbookFilename(p.month, p.year, 'register')}"`,
-    );
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${workbookFilename(p.month, p.year, 'register', 'pdf')}"`,
+      );
+    } else {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${workbookFilename(p.month, p.year, 'register')}"`,
+      );
+    }
     res.send(buffer);
   }
 

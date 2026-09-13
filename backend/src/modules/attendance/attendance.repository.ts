@@ -1,5 +1,10 @@
 import { query } from '../../database/pool';
 import { AppError, NotFoundError } from '../../common/errors';
+import {
+  createCursorPaginatedResult,
+  legacyOffsetFromCursor,
+  parseCursorPaginationQuery,
+} from '../../common/cursor-pagination';
 import { EmployeeLifecycleStatus } from '../employee/employee.constants';
 import {
   AttendanceCellUpdate,
@@ -17,16 +22,17 @@ import {
 } from './attendance.types';
 import {
   countByStatus,
-  employeeRowStatus,
+  employeeRowStatusFromPresentDays,
   isSunday,
   monthDateRange,
   statusLabel,
 } from './attendance.utils';
 import {
-  buildHorizontalWorkbook,
-  HorizontalExportEmployee,
-  parseHorizontalCsv,
-  parseHorizontalWorkbook,
+  buildMonthlyPdf,
+  buildMonthlyWorkbook,
+  MonthlyExportEmployee,
+  parseMonthlyCsv,
+  parseMonthlyWorkbook,
 } from './attendance.excel';
 
 interface ClientEmployeeRow {
@@ -40,15 +46,19 @@ interface ClientEmployeeRow {
 }
 
 interface RegisterExtras {
+  presentDays: number | null;
   overtimeHours: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
 }
 
 const EMPTY_REGISTER_EXTRAS: RegisterExtras = {
+  presentDays: null,
   overtimeHours: 0,
   nightAllowance: 0,
   punctualityAward: 0,
+  bonus: 0,
 };
 
 export class AttendanceRepository {
@@ -109,20 +119,24 @@ export class AttendanceRepository {
 
     const { rows } = await query<{
       employee_id: string;
+      present_days: string | null;
       overtime_hours: string;
       night_allowance: string;
       punctuality_award: string;
+      bonus: string;
     }>(
-      `SELECT employee_id, overtime_hours, night_allowance, punctuality_award
+      `SELECT employee_id, present_days, overtime_hours, night_allowance, punctuality_award, bonus
        FROM attendance_register_employee_overtime
        WHERE register_id = $1::uuid AND employee_id = ANY($2::uuid[])`,
       [registerId, employeeIds],
     );
     for (const row of rows) {
       map.set(row.employee_id, {
+        presentDays: row.present_days == null ? null : parseFloat(row.present_days),
         overtimeHours: parseFloat(row.overtime_hours) || 0,
         nightAllowance: parseFloat(row.night_allowance) || 0,
         punctualityAward: parseFloat(row.punctuality_award) || 0,
+        bonus: parseFloat(row.bonus) || 0,
       });
     }
     return map;
@@ -136,48 +150,27 @@ export class AttendanceRepository {
   ): Promise<void> {
     await query(
       `INSERT INTO attendance_register_employee_overtime (
-        register_id, employee_id, overtime_hours, night_allowance, punctuality_award, created_by
-      ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)
+        register_id, employee_id, present_days, overtime_hours, night_allowance, punctuality_award, bonus, created_by
+      ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
       ON CONFLICT (register_id, employee_id) DO UPDATE SET
+        present_days = EXCLUDED.present_days,
         overtime_hours = EXCLUDED.overtime_hours,
         night_allowance = EXCLUDED.night_allowance,
         punctuality_award = EXCLUDED.punctuality_award,
+        bonus = EXCLUDED.bonus,
         updated_at = NOW(),
         updated_by = EXCLUDED.created_by`,
       [
         registerId,
         employeeId,
+        extras.presentDays,
         extras.overtimeHours,
         extras.nightAllowance,
         extras.punctualityAward,
+        extras.bonus,
         user,
       ],
     );
-  }
-
-  async loadAttendanceMap(
-    employeeIds: string[],
-    fromDate: string,
-    toDate: string,
-  ): Promise<Map<string, Record<string, number | null>>> {
-    const map = new Map<string, Record<string, number | null>>();
-    if (!employeeIds.length) return map;
-
-    const { rows } = await query<{ employee_id: string; attendance_date: string; status: number }>(
-      `SELECT employee_id, attendance_date::text, status
-       FROM attendances
-       WHERE employee_id = ANY($1::uuid[])
-         AND attendance_date BETWEEN $2 AND $3
-         AND NOT is_deleted`,
-      [employeeIds, fromDate, toDate],
-    );
-
-    for (const row of rows) {
-      const empId = String(row.employee_id);
-      if (!map.has(empId)) map.set(empId, {});
-      map.get(empId)![String(row.attendance_date).slice(0, 10)] = Number(row.status);
-    }
-    return map;
   }
 
   buildRegisterMeta(
@@ -187,21 +180,9 @@ export class AttendanceRepository {
     month: number,
     year: number,
     employeeCount: number,
-    dates: string[],
-    attendanceMap: Map<string, Record<string, number | null>>,
-    employeeIds: string[],
+    totalDays: number,
+    enteredCount: number,
   ): AttendanceRegisterMeta {
-    const totalDays = dates.length;
-    const totalCells = employeeCount * totalDays;
-    let markedCells = 0;
-
-    for (const empId of employeeIds) {
-      const cells = attendanceMap.get(empId) ?? {};
-      for (const date of dates) {
-        if (cells[date] != null) markedCells++;
-      }
-    }
-
     return {
       id: register ? String(register.id) : '',
       clientId,
@@ -215,25 +196,58 @@ export class AttendanceRepository {
       submittedBy: register?.submitted_by ? String(register.submitted_by) : null,
       totalEmployees: employeeCount,
       totalDays,
-      markedCells,
-      unmarkedCells: totalCells - markedCells,
-      isComplete: totalCells > 0 && markedCells === totalCells,
+      markedCells: enteredCount,
+      unmarkedCells: Math.max(0, employeeCount - enteredCount),
+      isComplete: employeeCount > 0 && enteredCount === employeeCount,
     };
   }
 
   async getEmployeeList(filter: RegisterFilter): Promise<{
     register: AttendanceRegisterMeta;
     items: AttendanceEmployeeListItem[];
+    pagination: {
+      pageSize: number;
+      nextCursor: string | null;
+      prevCursor: string | null;
+      hasNext: boolean;
+      hasPrev: boolean;
+    };
   }> {
     const clientName = await this.getClientName(filter.clientId);
     const employees = await this.getClientEmployees(filter.clientId);
     const register = await this.getRegisterRow(filter.clientId, filter.month, filter.year);
-    const { dates, days, from, to } = monthDateRange(filter.year, filter.month);
-    const attendanceMap = await this.loadAttendanceMap(
-      employees.map((e) => e.id),
-      from,
-      to,
-    );
+    const { days } = monthDateRange(filter.year, filter.month);
+
+    const registerId = register ? String(register.id) : '';
+    const extrasMap = await this.loadRegisterExtrasMap(registerId, employees.map((e) => e.id));
+
+    const locked = String(register?.status ?? 'draft') === 'locked';
+    let enteredCount = 0;
+
+    const items = employees.map((emp) => {
+      const extras = extrasMap.get(emp.id) ?? EMPTY_REGISTER_EXTRAS;
+      if (extras.presentDays != null) enteredCount++;
+      return {
+        employeeId: emp.id,
+        employeeCode: emp.employee_code,
+        employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
+        departmentName: emp.department_name,
+        siteName: emp.site_name,
+        presentDays: extras.presentDays,
+        presentCount: extras.presentDays ?? 0,
+        overtimeHours: extras.overtimeHours,
+        nightAllowance: extras.nightAllowance,
+        punctualityAward: extras.punctualityAward,
+        bonus: extras.bonus,
+        rowStatus: employeeRowStatusFromPresentDays(extras.presentDays, locked),
+        absentCount: 0,
+        leaveCount: 0,
+        halfDayCount: 0,
+        holidayCount: 0,
+        weekOffCount: 0,
+        unmarkedCount: extras.presentDays == null ? 1 : 0,
+      };
+    });
 
     const registerMeta = this.buildRegisterMeta(
       register,
@@ -242,72 +256,61 @@ export class AttendanceRepository {
       filter.month,
       filter.year,
       employees.length,
-      dates,
-      attendanceMap,
-      employees.map((e) => e.id),
+      days.length,
+      enteredCount,
     );
 
-    const registerId = register ? String(register.id) : '';
-    const extrasMap = await this.loadRegisterExtrasMap(registerId, employees.map((e) => e.id));
-
-    const locked = registerMeta.status === 'locked';
-    const items = employees.map((emp) => {
-      const cells: Record<string, number | null> = {};
-      for (const date of dates) {
-        cells[date] = attendanceMap.get(emp.id)?.[date] ?? null;
-      }
-      const counts = countByStatus(cells, dates);
-      const extras = extrasMap.get(emp.id) ?? EMPTY_REGISTER_EXTRAS;
+    // Grid/export callers omit pageSize — return the full list.
+    if (filter.pageSize == null && !filter.cursor) {
       return {
-        employeeId: emp.id,
-        employeeCode: emp.employee_code,
-        employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
-        departmentName: emp.department_name,
-        siteName: emp.site_name,
-        presentCount: counts.present,
-        absentCount: counts.absent,
-        leaveCount: counts.leave,
-        halfDayCount: counts.halfDay,
-        holidayCount: counts.holiday,
-        weekOffCount: counts.weekOff,
-        unmarkedCount: counts.unmarked,
-        overtimeHours: extras.overtimeHours,
-        nightAllowance: extras.nightAllowance,
-        punctualityAward: extras.punctualityAward,
-        rowStatus: employeeRowStatus(counts, days.length, locked),
+        register: registerMeta,
+        items,
+        pagination: {
+          pageSize: items.length || 10,
+          nextCursor: null,
+          prevCursor: null,
+          hasNext: false,
+          hasPrev: false,
+        },
       };
-    });
+    }
 
-    return { register: registerMeta, items };
+    const pagination = parseCursorPaginationQuery(filter);
+    const { page, pageSize } = legacyOffsetFromCursor(pagination);
+    const start = (page - 1) * pageSize;
+    const pageItems = items.slice(start, start + pageSize);
+    const hasNext = start + pageSize < items.length;
+    const hasPrev = page > 1;
+
+    return {
+      register: registerMeta,
+      ...createCursorPaginatedResult(pageItems, pageSize, {
+        hasNext,
+        hasPrev,
+        nextCursor: hasNext ? `__offset_${page + 1}` : null,
+        prevCursor: hasPrev ? `__offset_${page - 1}` : null,
+      }),
+    };
   }
 
   async getGrid(filter: RegisterFilter, user: string): Promise<AttendanceGridResponse> {
     await this.ensureRegister(filter.clientId, filter.month, filter.year, user);
     const { register, items } = await this.getEmployeeList(filter);
-    const { dates, days, from, to } = monthDateRange(filter.year, filter.month);
-    const attendanceMap = await this.loadAttendanceMap(
-      items.map((i) => i.employeeId),
-      from,
-      to,
-    );
+    const { dates, days } = monthDateRange(filter.year, filter.month);
 
-    const employees: AttendanceGridEmployee[] = items.map((item) => {
-      const cells: Record<string, number | null> = {};
-      for (const date of dates) {
-        cells[date] = attendanceMap.get(item.employeeId)?.[date] ?? null;
-      }
-      return {
-        employeeId: item.employeeId,
-        employeeCode: item.employeeCode,
-        employeeName: item.employeeName,
-        departmentName: item.departmentName,
-        siteName: item.siteName,
-        cells,
-        overtimeHours: item.overtimeHours,
-        nightAllowance: item.nightAllowance,
-        punctualityAward: item.punctualityAward,
-      };
-    });
+    const employees: AttendanceGridEmployee[] = items.map((item) => ({
+      employeeId: item.employeeId,
+      employeeCode: item.employeeCode,
+      employeeName: item.employeeName,
+      departmentName: item.departmentName,
+      siteName: item.siteName,
+      cells: {},
+      presentDays: item.presentDays,
+      overtimeHours: item.overtimeHours,
+      nightAllowance: item.nightAllowance,
+      punctualityAward: item.punctualityAward,
+      bonus: item.bonus,
+    }));
 
     return { register, days, dates, employees };
   }
@@ -372,16 +375,19 @@ export class AttendanceRepository {
     month: number,
     year: number,
     employeeId: string,
-    cells: Array<{ date: string; status: number | null }>,
     user: string,
-    extras: RegisterExtras = EMPTY_REGISTER_EXTRAS,
+    extras: RegisterExtras,
   ): Promise<{ employee: AttendanceGridEmployee; register: AttendanceRegisterMeta }> {
-    const updates: AttendanceCellUpdate[] = cells.map((cell) => ({
-      employeeId,
-      date: cell.date,
-      status: cell.status,
-    }));
-    await this.updateCells(clientId, month, year, updates, user);
+    await this.assertEditable(clientId, month, year);
+
+    const employees = await this.getClientEmployees(clientId);
+    if (!employees.some((e) => e.id === employeeId)) {
+      throw new AppError(400, 'Employee is not assigned to this client.');
+    }
+
+    if (extras.presentDays == null || Number.isNaN(extras.presentDays) || extras.presentDays < 0) {
+      throw new AppError(400, 'Present days is required and must be zero or greater.');
+    }
 
     const register = await this.ensureRegister(clientId, month, year, user);
     await this.upsertEmployeeRegisterExtras(String(register.id), employeeId, extras, user);
@@ -436,55 +442,67 @@ export class AttendanceRepository {
     return updates.length;
   }
 
-  async parseImportBuffer(
-    buffer: Buffer,
-    filename: string,
-    month: number,
-    year: number,
-  ) {
+  async loadAttendanceMap(
+    employeeIds: string[],
+    fromDate: string,
+    toDate: string,
+  ): Promise<Map<string, Record<string, number | null>>> {
+    const map = new Map<string, Record<string, number | null>>();
+    if (!employeeIds.length) return map;
+
+    const { rows } = await query<{ employee_id: string; attendance_date: string; status: number }>(
+      `SELECT employee_id, attendance_date::text, status
+       FROM attendances
+       WHERE employee_id = ANY($1::uuid[])
+         AND attendance_date BETWEEN $2 AND $3
+         AND NOT is_deleted`,
+      [employeeIds, fromDate, toDate],
+    );
+
+    for (const row of rows) {
+      const empId = String(row.employee_id);
+      if (!map.has(empId)) map.set(empId, {});
+      map.get(empId)![String(row.attendance_date).slice(0, 10)] = Number(row.status);
+    }
+    return map;
+  }
+
+  async parseImportBuffer(buffer: Buffer, filename: string) {
     const lower = filename.toLowerCase();
     if (lower.endsWith('.xlsx') || lower.endsWith('.xlsm')) {
-      return parseHorizontalWorkbook(buffer, month, year);
+      return parseMonthlyWorkbook(buffer);
     }
     if (lower.endsWith('.csv')) {
-      return parseHorizontalCsv(buffer.toString('utf8'), month, year);
+      return parseMonthlyCsv(buffer.toString('utf8'));
     }
-    throw new AppError(400, 'Unsupported file format. Upload .xlsx or .csv in horizontal register format.');
+    throw new AppError(400, 'Unsupported file format. Upload .xlsx or .csv with Present Days columns.');
   }
 
   async previewImportBuffer(
     clientId: string,
-    month: number,
-    year: number,
+    _month: number,
+    _year: number,
     buffer: Buffer,
     filename: string,
   ): Promise<ImportPreviewResult> {
     const employees = await this.getClientEmployees(clientId);
     const codeMap = new Map(employees.map((e) => [e.employee_code.toLowerCase(), e]));
-    const parsed = await this.parseImportBuffer(buffer, filename, month, year);
-    const { dates } = monthDateRange(year, month);
-
-    if (parsed.dateColumns.length === 0) {
-      throw new AppError(400, 'No valid date columns found. Use headers like 01-Apr-26 for the selected month.');
-    }
+    const parsed = await this.parseImportBuffer(buffer, filename);
 
     const validRows: ImportPreviewEmployeeRow[] = [];
     const errors: ImportPreviewEmployeeRow[] = [];
-    const cellUpdates = new Map<string, Record<string, number | null>>();
     const extrasUpdates = new Map<string, RegisterExtras>();
-
-    for (const emp of employees) {
-      cellUpdates.set(emp.id, {});
-    }
 
     for (const row of parsed.rows) {
       const previewRow: ImportPreviewEmployeeRow = {
         employeeCode: row.employeeCode,
         employeeName: row.employeeName,
+        presentDays: row.presentDays,
         overtimeHours: row.overtimeHours,
         nightAllowance: row.nightAllowance,
         punctualityAward: row.punctualityAward,
-        cellsUpdated: Object.keys(row.cells).length,
+        bonus: row.bonus,
+        cellsUpdated: row.presentDays != null ? 1 : 0,
       };
 
       const emp = codeMap.get(row.employeeCode.toLowerCase());
@@ -494,15 +512,18 @@ export class AttendanceRepository {
         continue;
       }
 
-      for (const date of dates) {
-        if (row.cells[date] !== undefined) {
-          cellUpdates.get(emp.id)![date] = row.cells[date];
-        }
+      if (row.presentDays == null) {
+        previewRow.error = 'Present Days is required';
+        errors.push(previewRow);
+        continue;
       }
+
       extrasUpdates.set(emp.id, {
+        presentDays: row.presentDays,
         overtimeHours: row.overtimeHours,
         nightAllowance: row.nightAllowance,
         punctualityAward: row.punctualityAward,
+        bonus: row.bonus,
       });
       validRows.push(previewRow);
     }
@@ -515,14 +536,16 @@ export class AttendanceRepository {
         employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
         departmentName: emp.department_name,
         siteName: emp.site_name,
-        cells: cellUpdates.get(emp.id) ?? {},
+        cells: {},
+        presentDays: extras.presentDays,
         overtimeHours: extras.overtimeHours,
         nightAllowance: extras.nightAllowance,
         punctualityAward: extras.punctualityAward,
+        bonus: extras.bonus,
       };
     });
 
-    const totalCellsParsed = validRows.reduce((sum, r) => sum + r.cellsUpdated, 0);
+    const totalCellsParsed = validRows.length;
     return { validRows, errors, preview, totalCellsParsed };
   }
 
@@ -535,40 +558,33 @@ export class AttendanceRepository {
     user: string,
   ): Promise<{ applied: number; skipped: number; grid: AttendanceGridResponse }> {
     const preview = await this.previewImportBuffer(clientId, month, year, buffer, filename);
-    const { dates } = monthDateRange(year, month);
-    const updates: AttendanceCellUpdate[] = [];
-    const importedEmployeeIds = new Set<string>();
-
-    for (const row of preview.validRows) {
-      const emp = preview.preview.find((p) => p.employeeCode.toLowerCase() === row.employeeCode.toLowerCase());
-      if (!emp) continue;
-      importedEmployeeIds.add(emp.employeeId);
-      for (const date of dates) {
-        if (emp.cells[date] !== undefined) {
-          updates.push({ employeeId: emp.employeeId, date, status: emp.cells[date] ?? null });
-        }
-      }
-    }
-
-    await this.updateCells(clientId, month, year, updates, user);
-
     const register = await this.ensureRegister(clientId, month, year, user);
+    let applied = 0;
+
     for (const emp of preview.preview) {
-      if (!importedEmployeeIds.has(emp.employeeId)) continue;
+      if (emp.presentDays == null) continue;
+      const matched = preview.validRows.some(
+        (r) => r.employeeCode.toLowerCase() === emp.employeeCode.toLowerCase(),
+      );
+      if (!matched) continue;
+
       await this.upsertEmployeeRegisterExtras(
         String(register.id),
         emp.employeeId,
         {
+          presentDays: emp.presentDays,
           overtimeHours: emp.overtimeHours,
           nightAllowance: emp.nightAllowance,
           punctualityAward: emp.punctualityAward,
+          bonus: emp.bonus,
         },
         user,
       );
+      applied++;
     }
 
     const grid = await this.getGrid({ clientId, month, year }, user);
-    return { applied: updates.length, skipped: preview.errors.length, grid };
+    return { applied, skipped: preview.errors.length, grid };
   }
 
   async buildRegisterWorkbook(
@@ -577,18 +593,18 @@ export class AttendanceRepository {
     year: number,
     user: string,
     includeData: boolean,
+    format: 'excel' | 'pdf' = 'excel',
   ): Promise<Buffer> {
-    const clientName = await this.getClientName(clientId);
     const employees = await this.getClientEmployees(clientId);
-    const { dates } = monthDateRange(year, month);
 
-    let exportEmployees: HorizontalExportEmployee[] = employees.map((emp) => ({
+    let exportEmployees: MonthlyExportEmployee[] = employees.map((emp) => ({
       employeeCode: emp.employee_code,
       employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
-      cells: {},
+      presentDays: null,
       overtimeHours: 0,
       nightAllowance: 0,
       punctualityAward: 0,
+      bonus: 0,
     }));
 
     if (includeData) {
@@ -597,21 +613,32 @@ export class AttendanceRepository {
       exportEmployees = grid.employees.map((emp) => ({
         employeeCode: emp.employeeCode,
         employeeName: emp.employeeName,
-        cells: emp.cells,
+        presentDays: emp.presentDays,
         overtimeHours: emp.overtimeHours,
         nightAllowance: emp.nightAllowance,
         punctualityAward: emp.punctualityAward,
+        bonus: emp.bonus,
       }));
     }
 
-    return buildHorizontalWorkbook(clientName, month, year, dates, exportEmployees);
+    if (format === 'pdf') {
+      return buildMonthlyPdf(exportEmployees, {
+        title: 'Attendance Register',
+        subtitle: `${String(month).padStart(2, '0')}/${year}`,
+      });
+    }
+
+    return buildMonthlyWorkbook(exportEmployees);
   }
 
   async lockRegister(clientId: string, month: number, year: number, user: string) {
     await this.ensureRegister(clientId, month, year, user);
     const list = await this.getEmployeeList({ clientId, month, year });
     if (!list.register.isComplete) {
-      throw new AppError(400, `Register incomplete: ${list.register.unmarkedCells} cell(s) still unmarked.`);
+      throw new AppError(
+        400,
+        `Register incomplete: ${list.register.unmarkedCells} employee(s) still missing present days.`,
+      );
     }
 
     await query(
@@ -713,9 +740,11 @@ export class AttendanceRepository {
         weekOff: counts.weekOff,
         unmarked: counts.unmarked,
         workingDays: dates.length - counts.holiday - counts.weekOff,
+        presentDays: extras.presentDays,
         overtimeHours: extras.overtimeHours,
         nightAllowance: extras.nightAllowance,
         punctualityAward: extras.punctualityAward,
+        bonus: extras.bonus,
       },
       days: dates.map((date) => {
         const day = parseInt(date.slice(8, 10), 10);

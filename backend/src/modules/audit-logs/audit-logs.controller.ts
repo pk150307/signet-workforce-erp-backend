@@ -3,14 +3,12 @@ import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { auditLogsService } from './audit-logs.service';
 import { AuditLogFilter } from './audit-logs.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 function parseFilter(req: Request): AuditLogFilter {
   const pagination = parseCursorPaginationQuery(req.query);
-  const { page, pageSize } = legacyOffsetFromCursor(pagination);
   return {
-    page,
-    pageSize,
+    ...pagination,
     userId: req.query.userId as string | undefined,
     module: req.query.module as string | undefined,
     action: req.query.action as string | undefined,
@@ -45,10 +43,19 @@ export class AuditLogsController {
   }
 
   async export(req: Request, res: Response): Promise<void> {
-    const csv = await auditLogsService.export(parseFilter(req));
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="audit-logs-export.csv"');
-    res.status(200).send(csv);
+    const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
+    const buffer = await auditLogsService.export(parseFilter(req), format);
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="audit-logs-export.pdf"');
+    } else {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', 'attachment; filename="audit-logs-export.xlsx"');
+    }
+    res.status(200).send(buffer);
   }
 }
 

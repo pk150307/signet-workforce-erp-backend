@@ -34,21 +34,27 @@ export class AttendanceService {
     month: number,
     year: number,
     employeeId: string,
-    cells: Array<{ date: string; status: number | null }>,
     user: string,
-    extras: { overtimeHours?: number; nightAllowance?: number; punctualityAward?: number } = {},
+    extras: {
+      presentDays: number;
+      overtimeHours?: number;
+      nightAllowance?: number;
+      punctualityAward?: number;
+      bonus?: number;
+    },
   ) {
     return attendanceRepository.submitEmployeeRow(
       clientId,
       month,
       year,
       employeeId,
-      cells,
       user,
       {
+        presentDays: extras.presentDays,
         overtimeHours: extras.overtimeHours ?? 0,
         nightAllowance: extras.nightAllowance ?? 0,
         punctualityAward: extras.punctualityAward ?? 0,
+        bonus: extras.bonus ?? 0,
       },
     );
   }
@@ -97,8 +103,9 @@ export class AttendanceService {
     month: number,
     year: number,
     user: string,
+    format: 'excel' | 'pdf' = 'excel',
   ) {
-    return attendanceRepository.buildRegisterWorkbook(clientId, month, year, user, true);
+    return attendanceRepository.buildRegisterWorkbook(clientId, month, year, user, true, format);
   }
 
   lockRegister(input: LockRegisterInput, user: string) {

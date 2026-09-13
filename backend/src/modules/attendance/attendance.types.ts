@@ -3,10 +3,48 @@ import { AttendanceStatus } from '../../types/enums';
 export type RegisterStatus = 'draft' | 'locked';
 export type EmployeeRegisterRowStatus = 'not_started' | 'draft' | 'entered' | 'locked';
 
+export const ATTENDANCE_STATUS_LABELS: Record<number, string> = {
+  [AttendanceStatus.Present]: 'Present',
+  [AttendanceStatus.Absent]: 'Absent',
+  [AttendanceStatus.HalfDay]: 'Half Day',
+  [AttendanceStatus.OnLeave]: 'Leave',
+  [AttendanceStatus.Holiday]: 'Holiday',
+  [AttendanceStatus.WeekOff]: 'Week Off',
+};
+
+export const STATUS_CYCLE: Array<number | null> = [
+  AttendanceStatus.Present,
+  AttendanceStatus.Absent,
+  AttendanceStatus.OnLeave,
+  AttendanceStatus.HalfDay,
+  AttendanceStatus.Holiday,
+  null,
+];
+
+export const STATUS_CODES: Record<string, number> = {
+  P: AttendanceStatus.Present,
+  PRESENT: AttendanceStatus.Present,
+  A: AttendanceStatus.Absent,
+  ABSENT: AttendanceStatus.Absent,
+  L: AttendanceStatus.OnLeave,
+  LEAVE: AttendanceStatus.OnLeave,
+  HD: AttendanceStatus.HalfDay,
+  HALF: AttendanceStatus.HalfDay,
+  'HALF-DAY': AttendanceStatus.HalfDay,
+  H: AttendanceStatus.Holiday,
+  HOL: AttendanceStatus.Holiday,
+  HOLIDAY: AttendanceStatus.Holiday,
+  WO: AttendanceStatus.WeekOff,
+  W: AttendanceStatus.WeekOff,
+};
+
 export interface RegisterFilter {
   clientId: string;
   month: number;
   year: number;
+  pageSize?: number;
+  cursor?: string | null;
+  direction?: 'next' | 'prev';
 }
 
 export interface AttendanceRegisterMeta {
@@ -21,8 +59,11 @@ export interface AttendanceRegisterMeta {
   submittedAt: string | null;
   submittedBy: string | null;
   totalEmployees: number;
+  /** Calendar days in the month (informational). */
   totalDays: number;
+  /** Employees with present days entered. */
   markedCells: number;
+  /** Employees still missing present days. */
   unmarkedCells: number;
   isComplete: boolean;
 }
@@ -33,17 +74,20 @@ export interface AttendanceEmployeeListItem {
   employeeName: string;
   departmentName: string;
   siteName: string;
-  presentCount: number;
-  absentCount: number;
-  leaveCount: number;
-  halfDayCount: number;
-  holidayCount: number;
-  weekOffCount: number;
-  unmarkedCount: number;
+  presentDays: number | null;
   overtimeHours: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
   rowStatus: EmployeeRegisterRowStatus;
+  /** @deprecated kept for older clients; use presentDays */
+  presentCount?: number;
+  absentCount?: number;
+  leaveCount?: number;
+  halfDayCount?: number;
+  holidayCount?: number;
+  weekOffCount?: number;
+  unmarkedCount?: number;
 }
 
 export interface AttendanceGridEmployee {
@@ -52,10 +96,13 @@ export interface AttendanceGridEmployee {
   employeeName: string;
   departmentName: string;
   siteName: string;
+  /** Always empty under monthly present-days model; kept for API compatibility. */
   cells: Record<string, number | null>;
+  presentDays: number | null;
   overtimeHours: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
 }
 
 export interface AttendanceGridResponse {
@@ -71,14 +118,25 @@ export interface AttendanceCellUpdate {
   status: number | null;
 }
 
+export interface RegisterExtrasInput {
+  presentDays: number;
+  overtimeHours?: number;
+  nightAllowance?: number;
+  punctualityAward?: number;
+  bonus?: number;
+}
+
 export interface SubmitEmployeeRowInput {
   clientId: string;
   month: number;
   year: number;
-  cells: Array<{ date: string; status: number | null }>;
+  presentDays: number;
   overtimeHours?: number;
   nightAllowance?: number;
   punctualityAward?: number;
+  bonus?: number;
+  /** @deprecated ignored — day cells are no longer stored for payroll */
+  cells?: Array<{ date: string; status: number | null }>;
 }
 
 export interface SubmitEmployeeRowResponse {
@@ -97,9 +155,11 @@ export interface BulkMarkInput {
 export interface ImportPreviewEmployeeRow {
   employeeCode: string;
   employeeName?: string;
+  presentDays: number | null;
   overtimeHours: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
   cellsUpdated: number;
   error?: string;
 }
@@ -150,9 +210,11 @@ export interface EmployeeAttendanceCalendar {
     weekOff: number;
     unmarked: number;
     workingDays: number;
+    presentDays: number | null;
     overtimeHours: number;
     nightAllowance: number;
     punctualityAward: number;
+    bonus: number;
   };
   days: Array<{
     date: string;
@@ -162,38 +224,3 @@ export interface EmployeeAttendanceCalendar {
     statusLabel: string;
   }>;
 }
-
-export const ATTENDANCE_STATUS_LABELS: Record<number, string> = {
-  [AttendanceStatus.Present]: 'Present',
-  [AttendanceStatus.Absent]: 'Absent',
-  [AttendanceStatus.HalfDay]: 'Half Day',
-  [AttendanceStatus.OnLeave]: 'Leave',
-  [AttendanceStatus.Holiday]: 'Holiday',
-  [AttendanceStatus.WeekOff]: 'Week Off',
-};
-
-export const STATUS_CYCLE: Array<number | null> = [
-  AttendanceStatus.Present,
-  AttendanceStatus.Absent,
-  AttendanceStatus.OnLeave,
-  AttendanceStatus.HalfDay,
-  AttendanceStatus.Holiday,
-  null,
-];
-
-export const STATUS_CODES: Record<string, number> = {
-  P: AttendanceStatus.Present,
-  PRESENT: AttendanceStatus.Present,
-  A: AttendanceStatus.Absent,
-  ABSENT: AttendanceStatus.Absent,
-  L: AttendanceStatus.OnLeave,
-  LEAVE: AttendanceStatus.OnLeave,
-  HD: AttendanceStatus.HalfDay,
-  HALF: AttendanceStatus.HalfDay,
-  'HALF-DAY': AttendanceStatus.HalfDay,
-  H: AttendanceStatus.Holiday,
-  HOL: AttendanceStatus.Holiday,
-  HOLIDAY: AttendanceStatus.Holiday,
-  WO: AttendanceStatus.WeekOff,
-  W: AttendanceStatus.WeekOff,
-};

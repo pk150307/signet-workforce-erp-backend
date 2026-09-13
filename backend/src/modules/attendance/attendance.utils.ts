@@ -92,6 +92,15 @@ export function employeeRowStatus(
   return 'entered';
 }
 
+export function employeeRowStatusFromPresentDays(
+  presentDays: number | null | undefined,
+  registerLocked: boolean,
+): EmployeeRegisterRowStatus {
+  if (registerLocked) return 'locked';
+  if (presentDays == null) return 'not_started';
+  return 'entered';
+}
+
 export function isSunday(year: number, month: number, day: number): boolean {
   return new Date(year, month - 1, day).getDay() === 0;
 }

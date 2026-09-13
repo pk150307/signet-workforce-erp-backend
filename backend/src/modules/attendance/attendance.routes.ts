@@ -6,12 +6,14 @@ import { attendanceController } from './attendance.controller';
 import {
   bulkMarkValidation,
   employeeCalendarValidation,
+  exportRegisterValidation,
   lockValidation,
   registerPeriodQuery,
   submitEmployeeRowValidation,
   unlockValidation,
   updateCellsValidation,
 } from './attendance.validation';
+import { cursorPaginationValidators } from '../../types';
 
 const router = Router();
 const upload = multer({
@@ -29,9 +31,13 @@ const upload = multer({
 
 router.use(authenticate);
 
-router.get('/registers/employees', validate(registerPeriodQuery), (req, res, next) => {
-  attendanceController.employeeList(req, res).catch(next);
-});
+router.get(
+  '/registers/employees',
+  validate([...registerPeriodQuery, ...cursorPaginationValidators]),
+  (req, res, next) => {
+    attendanceController.employeeList(req, res).catch(next);
+  },
+);
 
 router.get('/registers/grid', validate(registerPeriodQuery), (req, res, next) => {
   attendanceController.grid(req, res).catch(next);
@@ -57,7 +63,7 @@ router.get('/registers/import/template', validate(registerPeriodQuery), (req, re
   attendanceController.importTemplate(req, res).catch(next);
 });
 
-router.get('/registers/import/export', validate(registerPeriodQuery), (req, res, next) => {
+router.get('/registers/import/export', validate(exportRegisterValidation), (req, res, next) => {
   attendanceController.exportRegister(req, res).catch(next);
 });
 

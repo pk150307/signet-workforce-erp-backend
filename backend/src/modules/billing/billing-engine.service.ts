@@ -124,7 +124,11 @@ export class BillingEngineService {
         }
 
         employeeCharges = round2(
-          employeeCharges + grade.overtimePay + grade.nightAllowance + grade.punctualityAward,
+          employeeCharges
+            + grade.overtimePay
+            + grade.nightAllowance
+            + grade.punctualityAward
+            + grade.bonus,
         );
       }
     } else {
@@ -146,7 +150,11 @@ export class BillingEngineService {
         }
 
         employeeCharges = round2(
-          employeeCharges + dept.overtimePay + dept.nightAllowance + dept.punctualityAward,
+          employeeCharges
+            + dept.overtimePay
+            + dept.nightAllowance
+            + dept.punctualityAward
+            + dept.bonus,
         );
       }
     }

@@ -210,7 +210,7 @@ export interface InvoicePreviewDto {
     unitRate: number;
     amount: number;
     hsnSacCode: string;
-    category: 'manpower' | 'overtime' | 'night_allowance' | 'punctuality_award' | 'pf' | 'esi';
+    category: 'manpower' | 'overtime' | 'night_allowance' | 'punctuality_award' | 'bonus' | 'pf' | 'esi';
   }>;
 }
 

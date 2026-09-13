@@ -6,6 +6,7 @@ import { AUDIT_LOG_PERMISSIONS } from './audit-logs.permissions';
 import {
   auditLogIdValidation,
   auditLogSummaryValidation,
+  exportAuditLogsValidation,
   listAuditLogsValidation,
 } from './audit-logs.validation';
 
@@ -16,7 +17,7 @@ router.use(authenticate);
 router.get(
   '/export',
   authorizePermission(AUDIT_LOG_PERMISSIONS.EXPORT),
-  validate(listAuditLogsValidation),
+  validate(exportAuditLogsValidation),
   (req, res, next) => {
     auditLogsController.export(req, res).catch(next);
   },

@@ -3,7 +3,7 @@ import { companyService } from './company.service';
 import { sendNoContent, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { UpdateCompanyProfileInput } from './company.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 export class CompanyController {
   async getProfile(_req: Request, res: Response): Promise<void> {
@@ -22,10 +22,8 @@ export class CompanyController {
 
   async listBranches(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await companyService.listBranches({
-      page,
-      pageSize,
+      ...pagination,
       search: req.query.search as string | undefined,
       isActive:
         req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined,
@@ -35,10 +33,8 @@ export class CompanyController {
 
   async listOffices(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await companyService.listOffices({
-      page,
-      pageSize,
+      ...pagination,
       search: req.query.search as string | undefined,
       isActive:
         req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined,

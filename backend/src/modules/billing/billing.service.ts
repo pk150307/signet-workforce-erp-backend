@@ -216,6 +216,17 @@ export class BillingService {
             category: 'punctuality_award',
           });
         }
+
+        if (grade.bonus > 0) {
+          lineItems.push({
+            description: `Bonus - ${grade.designationName} (${grade.gradeCode}) - ${siteName} - ${periodLabel}`,
+            quantity: 1,
+            unitRate: grade.bonus,
+            amount: grade.bonus,
+            hsnSacCode: DEFAULT_HSN_SAC,
+            category: 'bonus',
+          });
+        }
       }
     } else {
       for (const dept of deptAggregates) {
@@ -273,6 +284,17 @@ export class BillingService {
             amount: dept.punctualityAward,
             hsnSacCode: DEFAULT_HSN_SAC,
             category: 'punctuality_award',
+          });
+        }
+
+        if (dept.bonus > 0) {
+          lineItems.push({
+            description: `Bonus - ${dept.departmentName} - ${siteName} - ${periodLabel}`,
+            quantity: 1,
+            unitRate: dept.bonus,
+            amount: dept.bonus,
+            hsnSacCode: DEFAULT_HSN_SAC,
+            category: 'bonus',
           });
         }
       }

@@ -16,6 +16,11 @@ export const listAuditLogsValidation = [
   query('search').optional().isString().trim().isLength({ max: 200 }),
 ];
 
+export const exportAuditLogsValidation = [
+  ...listAuditLogsValidation,
+  query('format').optional().isIn(['excel', 'pdf']),
+];
+
 export const auditLogIdValidation = [param('id').isUUID().withMessage('Invalid audit log id')];
 
 export const auditLogSummaryValidation = [

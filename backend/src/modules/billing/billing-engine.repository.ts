@@ -173,10 +173,12 @@ export class BillingEngineRepository {
          COALESCE(SUM(
            pe.basic_salary + pe.house_rent_allowance + pe.special_allowance
            + pe.overtime_pay + pe.night_allowance + pe.punctuality_award
+           + COALESCE(pe.bonus, 0)
          ), 0)::text AS gross_earnings,
          COALESCE(SUM(
            pe.basic_salary + pe.house_rent_allowance + pe.special_allowance
            + pe.overtime_pay + pe.night_allowance + pe.punctuality_award
+           + COALESCE(pe.bonus, 0)
            - pe.provident_fund - pe.esi - pe.professional_tax - pe.lwf
          ), 0)::text AS net_earnings,
          COALESCE(SUM(pe.lwf), 0)::text AS employee_lwf,

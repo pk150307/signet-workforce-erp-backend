@@ -6,6 +6,11 @@ export const registerPeriodQuery = [
   query('year').isInt({ min: 2000, max: 2100 }).toInt(),
 ];
 
+export const exportRegisterValidation = [
+  ...registerPeriodQuery,
+  query('format').optional().isIn(['excel', 'pdf']),
+];
+
 export const updateCellsValidation = [
   body('clientId').isUUID(),
   body('month').isInt({ min: 1, max: 12 }),
@@ -21,12 +26,12 @@ export const submitEmployeeRowValidation = [
   body('clientId').isUUID(),
   body('month').isInt({ min: 1, max: 12 }),
   body('year').isInt({ min: 2000, max: 2100 }),
-  body('cells').isArray({ min: 1 }),
-  body('cells.*.date').isISO8601(),
-  body('cells.*.status').optional({ nullable: true }).isInt({ min: 1, max: 8 }),
+  body('presentDays').isFloat({ min: 0, max: 31 }),
   body('overtimeHours').optional().isFloat({ min: 0 }),
   body('nightAllowance').optional().isFloat({ min: 0 }),
   body('punctualityAward').optional().isFloat({ min: 0 }),
+  body('bonus').optional().isFloat({ min: 0 }),
+  body('cells').optional().isArray(),
 ];
 
 export const bulkMarkValidation = [

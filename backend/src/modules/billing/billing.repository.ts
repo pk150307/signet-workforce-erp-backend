@@ -250,10 +250,16 @@ export class BillingRepository {
               COALESCE(ed.designation_grade_id, e.designation_grade_id) AS designation_grade_id,
               dg.code AS grade_code,
               dg.name AS grade_name,
-              COALESCE(dg.basic_salary, ed.basic_salary, e.basic_salary) AS basic_salary,
-              COALESCE(dg.house_rent_allowance, 0) AS house_rent_allowance,
-              COALESCE(dg.special_allowance, 0) AS special_allowance,
+              COALESCE(ed.basic_salary, e.basic_salary, dg.basic_salary, 0) AS basic_salary,
+              COALESCE(ed.house_rent_allowance, e.house_rent_allowance, dg.house_rent_allowance, 0) AS house_rent_allowance,
+              COALESCE(ed.special_allowance, e.special_allowance, dg.special_allowance, 0) AS special_allowance,
               COALESCE(
+                NULLIF(
+                  COALESCE(ed.basic_salary, e.basic_salary, 0)
+                    + COALESCE(ed.house_rent_allowance, e.house_rent_allowance, 0)
+                    + COALESCE(ed.special_allowance, e.special_allowance, 0),
+                  0
+                ),
                 NULLIF(
                   COALESCE(dg.basic_salary, 0) + COALESCE(dg.house_rent_allowance, 0) + COALESCE(dg.special_allowance, 0),
                   0
@@ -302,18 +308,20 @@ export class BillingRepository {
       [employeeIds, monthStart, monthEnd],
     );
 
-    const presentMap = new Map<string, number>();
+    const legacyPresentMap = new Map<string, number>();
     for (const row of attendanceRows) {
       const empId = String(row.employee_id);
       const days = countBillableDays(Number(row.status)) * Number(row.day_count);
-      presentMap.set(empId, round2((presentMap.get(empId) ?? 0) + days));
+      legacyPresentMap.set(empId, round2((legacyPresentMap.get(empId) ?? 0) + days));
     }
 
     const { rows: registerExtrasRows } = await query<Record<string, unknown>>(
       `SELECT aro.employee_id,
+              SUM(aro.present_days)::float AS present_days,
               COALESCE(SUM(aro.overtime_hours), 0)::float AS overtime_amount,
               COALESCE(SUM(aro.night_allowance), 0)::float AS night_allowance,
-              COALESCE(SUM(aro.punctuality_award), 0)::float AS punctuality_award
+              COALESCE(SUM(aro.punctuality_award), 0)::float AS punctuality_award,
+              COALESCE(SUM(aro.bonus), 0)::float AS bonus
        FROM attendance_register_employee_overtime aro
        INNER JOIN attendance_registers ar ON ar.id = aro.register_id
        WHERE aro.employee_id = ANY($1::uuid[])
@@ -326,9 +334,11 @@ export class BillingRepository {
       registerExtrasRows.map((r) => [
         String(r.employee_id),
         {
+          presentDays: r.present_days == null ? null : Number(r.present_days),
           overtimePay: Number(r.overtime_amount) || 0,
           nightAllowance: Number(r.night_allowance) || 0,
           punctualityAward: Number(r.punctuality_award) || 0,
+          bonus: Number(r.bonus) || 0,
         },
       ]),
     );
@@ -336,9 +346,11 @@ export class BillingRepository {
     return rows.map((row) => {
       const employeeId = String(row.id);
       const extras = extrasMap.get(employeeId) ?? {
+        presentDays: null,
         overtimePay: 0,
         nightAllowance: 0,
         punctualityAward: 0,
+        bonus: 0,
       };
       const hasGrade = row.designation_grade_id != null;
       const overtimePay = round2(extras.overtimePay);
@@ -363,6 +375,9 @@ export class BillingRepository {
           employee_esi_percentage: row.esd_employee_esi_percentage as string | null,
         },
       );
+      const presentDays = extras.presentDays != null
+        ? round2(extras.presentDays)
+        : (legacyPresentMap.get(employeeId) ?? 0);
       return {
         employeeId,
         departmentId: String(row.department_id),
@@ -375,10 +390,11 @@ export class BillingRepository {
         basicSalary: toNumber(row.basic_salary as string),
         grossSalary: toNumber(row.gross_salary as string),
         statutoryConfig,
-        presentDays: presentMap.get(employeeId) ?? 0,
+        presentDays,
         overtimePay,
         nightAllowance: extras.nightAllowance,
         punctualityAward: extras.punctualityAward,
+        bonus: round2(extras.bonus),
       };
     });
   }

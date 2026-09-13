@@ -27,6 +27,7 @@ export interface SiteEmployeeBillingRow {
   overtimePay: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
 }
 
 export interface DepartmentBillingAggregate {
@@ -37,6 +38,7 @@ export interface DepartmentBillingAggregate {
   overtimePay: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
   basicEarned: number;
   grossEarned: number;
   employerPf: number;
@@ -56,6 +58,7 @@ export interface DesignationGradeBillingAggregate {
   overtimePay: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus: number;
   basicEarned: number;
   grossEarned: number;
   employerPf: number;
@@ -85,7 +88,9 @@ export function computeBillingGrossEarned(
   workingDays: number,
 ): number {
   const proRatedGross = computeGrossEarned(emp.grossSalary, workingDays, emp.presentDays);
-  return round2(proRatedGross + emp.nightAllowance + emp.punctualityAward + emp.overtimePay);
+  return round2(
+    proRatedGross + emp.nightAllowance + emp.punctualityAward + emp.overtimePay + emp.bonus,
+  );
 }
 
 /** @deprecated Use computeEmployerPf with StatutoryContributionConfig */
@@ -125,6 +130,7 @@ export function aggregateByDepartment(
       existing.overtimePay = round2(existing.overtimePay + emp.overtimePay);
       existing.nightAllowance = round2(existing.nightAllowance + emp.nightAllowance);
       existing.punctualityAward = round2(existing.punctualityAward + emp.punctualityAward);
+      existing.bonus = round2(existing.bonus + emp.bonus);
       existing.basicEarned = round2(existing.basicEarned + basicEarned);
       existing.grossEarned = round2(existing.grossEarned + grossEarned);
       existing.employerPf = round2(existing.employerPf + employerPf);
@@ -140,6 +146,7 @@ export function aggregateByDepartment(
       overtimePay: round2(emp.overtimePay),
       nightAllowance: round2(emp.nightAllowance),
       punctualityAward: round2(emp.punctualityAward),
+      bonus: round2(emp.bonus),
       basicEarned,
       grossEarned,
       employerPf,
@@ -171,6 +178,7 @@ export function aggregateByDesignationGrade(
       existing.overtimePay = round2(existing.overtimePay + emp.overtimePay);
       existing.nightAllowance = round2(existing.nightAllowance + emp.nightAllowance);
       existing.punctualityAward = round2(existing.punctualityAward + emp.punctualityAward);
+      existing.bonus = round2(existing.bonus + emp.bonus);
       existing.basicEarned = round2(existing.basicEarned + basicEarned);
       existing.grossEarned = round2(existing.grossEarned + grossEarned);
       existing.employerPf = round2(existing.employerPf + employerPf);
@@ -191,6 +199,7 @@ export function aggregateByDesignationGrade(
       overtimePay: round2(emp.overtimePay),
       nightAllowance: round2(emp.nightAllowance),
       punctualityAward: round2(emp.punctualityAward),
+      bonus: round2(emp.bonus),
       basicEarned,
       grossEarned,
       employerPf,
