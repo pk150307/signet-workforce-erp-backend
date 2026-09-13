@@ -29,7 +29,6 @@ export function parseStatutoryFilter(req: Request): StatutoryFilter {
     employeeStatus: parseEmployeeStatusFilter(req.query.employeeStatus),
     department: req.query.department as string | undefined,
     hasUan: parseOptionalBool(req.query.hasUan),
-    hasPf: parseOptionalBool(req.query.hasPf),
     hasEsic: parseOptionalBool(req.query.hasEsic),
     sortBy: req.query.sortBy as string | undefined,
     sortDir: req.query.sortDir === 'desc' ? 'desc' : req.query.sortDir === 'asc' ? 'asc' : undefined,

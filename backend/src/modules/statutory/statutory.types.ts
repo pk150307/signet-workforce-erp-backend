@@ -92,7 +92,6 @@ export interface StatutoryFilter {
   employeeStatus?: EmployeeStatusFilter;
   department?: string;
   hasUan?: boolean;
-  hasPf?: boolean;
   hasEsic?: boolean;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
@@ -108,7 +107,6 @@ export const PF_ESIC_EXPORT_HEADERS = [
   'Site',
   'Aadhaar Number',
   'UAN Number',
-  'PF Number',
   'ESIC Number',
   'PAN Number',
   'Status',

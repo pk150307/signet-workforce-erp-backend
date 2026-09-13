@@ -12,10 +12,19 @@ export class StatutoryController {
   }
 
   async export(req: Request, res: Response): Promise<void> {
-    const csv = await statutoryService.export(parseStatutoryFilter(req));
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="pf-esic-export.csv"');
-    res.status(200).send(csv);
+    const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
+    const buffer = await statutoryService.export(parseStatutoryFilter(req), format);
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="pf-esic-export.pdf"');
+    } else {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', 'attachment; filename="pf-esic-export.xlsx"');
+    }
+    res.status(200).send(buffer);
   }
 
   async getByEmployeeId(req: Request, res: Response): Promise<void> {

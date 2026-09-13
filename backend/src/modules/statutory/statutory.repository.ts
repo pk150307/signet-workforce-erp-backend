@@ -8,6 +8,8 @@ import {
 } from '../../types';
 import { PfEsicDetail, PfEsicListItem, PfEsicStatus, PF_ESIC_EXPORT_HEADERS, StatutoryFilter, UpsertPfEsicInput } from './statutory.types';
 import { formatDate } from '../../utils/formatters';
+import { buildExcelBuffer } from '../../utils/excel-export';
+import { buildPdfTableBuffer } from '../../utils/pdf-export';
 import { EmployeeLifecycleStatus } from '../employee/employee.constants';
 
 export class StatutoryRepository {
@@ -91,12 +93,6 @@ export class StatutoryRepository {
       conditions.push(`COALESCE(NULLIF(esd.uan_number, ''), NULLIF(e.uan_number, ''), '') = ''`);
     }
 
-    if (filter.hasPf === true) {
-      conditions.push(`COALESCE(NULLIF(esd.pf_number, ''), NULLIF(e.pf_number, ''), '') <> ''`);
-    } else if (filter.hasPf === false) {
-      conditions.push(`COALESCE(NULLIF(esd.pf_number, ''), NULLIF(e.pf_number, ''), '') = ''`);
-    }
-
     if (filter.hasEsic === true) {
       conditions.push(`COALESCE(NULLIF(esd.esi_number, ''), NULLIF(e.esi_number, ''), '') <> ''`);
     } else if (filter.hasEsic === false) {
@@ -134,7 +130,6 @@ export class StatutoryRepository {
       clientCompanyName: [{ column: 'c.company_name', key: 'clientCompanyName', direction }],
       aadhaarNumber: [{ column: 'e.aadhaar_number', key: 'aadhaarNumber', direction }],
       uanNumber: [{ column: 'COALESCE(esd.uan_number, e.uan_number)', key: 'uanNumber', direction }],
-      pfNumber: [{ column: 'COALESCE(esd.pf_number, e.pf_number)', key: 'pfNumber', direction }],
       esicNumber: [{ column: 'COALESCE(esd.esi_number, e.esi_number)', key: 'esicNumber', direction }],
       status: [{ column: "COALESCE(esd.status, 'Active')", key: 'status', direction }],
       effectiveDate: [
@@ -168,7 +163,10 @@ export class StatutoryRepository {
     return finalizeCursorPage(rows, pagination, (r) => this.mapListItem(r), sortFields);
   }
 
-  async exportCsv(filter: StatutoryFilter): Promise<string> {
+  async exportCsv(
+    filter: StatutoryFilter,
+    format: 'excel' | 'pdf' = 'excel',
+  ): Promise<Buffer> {
     const { extra, params } = this.buildFilter(filter);
 
     const { rows } = await query<Record<string, unknown>>(
@@ -178,35 +176,33 @@ export class StatutoryRepository {
       params,
     );
 
-    const escape = (value: unknown) => {
-      const str = value == null ? '' : String(value);
-      return `"${str.replace(/"/g, '""')}"`;
-    };
-
-    const lines = [PF_ESIC_EXPORT_HEADERS.join(',')];
-    for (const r of rows) {
+    const dataRows = rows.map((r) => {
       const item = this.mapListItem(r);
-      lines.push(
-        [
-          item.employeeCode,
-          item.fullName,
-          item.clientCompanyName ?? '',
-          item.designation,
-          item.siteName ?? '',
-          item.aadhaarNumber ?? '',
-          item.uanNumber ?? '',
-          item.pfNumber ?? '',
-          item.esicNumber ?? '',
-          item.panNumber ?? '',
-          item.status,
-          item.effectiveDate ?? '',
-        ]
-          .map(escape)
-          .join(','),
-      );
+      return [
+        item.employeeCode,
+        item.fullName,
+        item.clientCompanyName ?? '',
+        item.designation,
+        item.siteName ?? '',
+        item.aadhaarNumber ?? '',
+        item.uanNumber ?? '',
+        item.esicNumber ?? '',
+        item.panNumber ?? '',
+        item.status,
+        item.effectiveDate ?? '',
+      ];
+    });
+
+    if (format === 'pdf') {
+      return buildPdfTableBuffer({
+        title: 'PF-ESIC',
+        headers: [...PF_ESIC_EXPORT_HEADERS],
+        rows: dataRows,
+        landscape: true,
+      });
     }
 
-    return lines.join('\n');
+    return buildExcelBuffer('PF-ESIC', [...PF_ESIC_EXPORT_HEADERS], dataRows);
   }
 
   async findByEmployeeId(employeeId: string): Promise<PfEsicDetail | null> {

@@ -52,6 +52,7 @@ export interface PayslipPrintData {
     id: string;
     code: string;
     name: string;
+    softCode: string | null;
     department: string;
     designation: string;
     siteName: string | null;
@@ -61,7 +62,6 @@ export interface PayslipPrintData {
     ifscCode: string | null;
     panNumber: string | null;
     uanNumber: string | null;
-    pfNumber: string | null;
     esiNumber: string | null;
   };
   attendance: {

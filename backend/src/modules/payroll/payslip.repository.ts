@@ -51,8 +51,13 @@ export class PayslipRepository {
               ${ATTENDANCE_REGISTER_EXTRAS_SELECT},
               esd.is_pf_applicable AS esd_is_pf_applicable,
               esd.is_esi_applicable AS esd_is_esi_applicable,
+              esd.is_lwf_applicable AS esd_is_lwf_applicable,
               esd.employee_pf_percentage AS esd_employee_pf_percentage,
-              esd.employee_esi_percentage AS esd_employee_esi_percentage
+              esd.employee_esi_percentage AS esd_employee_esi_percentage,
+              esd.employee_lwf_percentage AS esd_employee_lwf_percentage,
+              esd.employee_pf_max_amount AS esd_employee_pf_max_amount,
+              esd.employee_esi_max_amount AS esd_employee_esi_max_amount,
+              esd.employee_lwf_max_amount AS esd_employee_lwf_max_amount
        FROM payroll_entries pe
        INNER JOIN employees e ON e.id = pe.employee_id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
@@ -183,6 +188,7 @@ export class PayslipRepository {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT ss.*, e.employee_code, e.first_name, e.last_name, e.joining_date,
               e.bank_name, e.account_number, e.ifsc_code, e.pan_number,
+              COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
               COALESCE(esd.uan_number, e.uan_number) AS uan_number,
               COALESCE(esd.pf_number, e.pf_number) AS pf_number,
               COALESCE(esd.esi_number, e.esi_number) AS esi_number,
@@ -190,6 +196,14 @@ export class PayslipRepository {
               pe.basic_salary AS earned_basic_salary,
               pe.house_rent_allowance AS earned_house_rent_allowance,
               pe.special_allowance AS earned_special_allowance,
+              pe.basic_salary,
+              pe.house_rent_allowance,
+              pe.special_allowance,
+              pe.overtime_pay,
+              pe.overtime_hours,
+              pe.night_allowance,
+              pe.punctuality_award,
+              pe.bonus,
               pe.present_days, pe.leave_days, pe.absent_days,
               ss.month AS payroll_month,
               ss.year AS payroll_year,
@@ -197,8 +211,13 @@ export class PayslipRepository {
               ${EMPLOYEE_PAY_GRADE_SELECT},
               esd.is_pf_applicable AS esd_is_pf_applicable,
               esd.is_esi_applicable AS esd_is_esi_applicable,
+              esd.is_lwf_applicable AS esd_is_lwf_applicable,
               esd.employee_pf_percentage AS esd_employee_pf_percentage,
-              esd.employee_esi_percentage AS esd_employee_esi_percentage
+              esd.employee_esi_percentage AS esd_employee_esi_percentage,
+              esd.employee_lwf_percentage AS esd_employee_lwf_percentage,
+              esd.employee_pf_max_amount AS esd_employee_pf_max_amount,
+              esd.employee_esi_max_amount AS esd_employee_esi_max_amount,
+              esd.employee_lwf_max_amount AS esd_employee_lwf_max_amount
        FROM salary_slips ss
        INNER JOIN employees e ON e.id = ss.employee_id
        INNER JOIN departments d ON d.id = e.department_id
@@ -319,6 +338,7 @@ export class PayslipRepository {
         id: String(r.employee_id),
         code: String(r.employee_code),
         name: `${r.first_name} ${r.last_name}`,
+        softCode: r.client_soft_code ? String(r.client_soft_code) : null,
         department: String(r.department_name),
         designation: String(r.designation_name),
         siteName: r.site_name ? String(r.site_name) : null,
@@ -328,7 +348,6 @@ export class PayslipRepository {
         ifscCode: r.ifsc_code ? String(r.ifsc_code) : null,
         panNumber: r.pan_number ? String(r.pan_number) : null,
         uanNumber: r.uan_number ? String(r.uan_number) : null,
-        pfNumber: r.pf_number ? String(r.pf_number) : null,
         esiNumber: r.esi_number ? String(r.esi_number) : null,
       },
       attendance: {

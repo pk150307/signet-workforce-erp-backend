@@ -7,15 +7,13 @@ import {
   sendDeleteActionResult,
   toDeleteActionContext,
 } from '../delete-requests/delete-action.util';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 export class SiteController {
   async list(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await siteService.list({
-      page,
-      pageSize,
+      ...pagination,
       search: req.query.search as string | undefined,
       clientId: req.query.clientId as string | undefined,
       isActive:

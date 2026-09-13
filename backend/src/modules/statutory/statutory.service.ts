@@ -7,8 +7,8 @@ export class StatutoryService {
     return statutoryRepository.findAll(filter);
   }
 
-  export(filter: StatutoryFilter) {
-    return statutoryRepository.exportCsv(filter);
+  export(filter: StatutoryFilter, format: 'excel' | 'pdf' = 'excel') {
+    return statutoryRepository.exportCsv(filter, format);
   }
 
   async getByEmployeeId(employeeId: string) {

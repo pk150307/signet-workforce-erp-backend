@@ -18,7 +18,6 @@ const pfEsicQueryFields = [
     }),
   query('department').optional().isString(),
   query('hasUan').optional().isBoolean().toBoolean(),
-  query('hasPf').optional().isBoolean().toBoolean(),
   query('hasEsic').optional().isBoolean().toBoolean(),
   query('sortBy').optional().isIn([
     'employeeCode',
@@ -27,7 +26,6 @@ const pfEsicQueryFields = [
     'clientCompanyName',
     'aadhaarNumber',
     'uanNumber',
-    'pfNumber',
     'esicNumber',
     'status',
     'effectiveDate',
@@ -53,7 +51,6 @@ export const exportPfEsicValidation = [
     }),
   query('department').optional().isString(),
   query('hasUan').optional().isBoolean().toBoolean(),
-  query('hasPf').optional().isBoolean().toBoolean(),
   query('hasEsic').optional().isBoolean().toBoolean(),
   query('sortBy').optional().isIn([
     'employeeCode',
@@ -62,7 +59,6 @@ export const exportPfEsicValidation = [
     'clientCompanyName',
     'aadhaarNumber',
     'uanNumber',
-    'pfNumber',
     'esicNumber',
     'status',
     'effectiveDate',
@@ -70,6 +66,7 @@ export const exportPfEsicValidation = [
   query('sortDir').optional().isIn(['asc', 'desc']),
   query('pfApplicable').optional().isBoolean().toBoolean(),
   query('esiApplicable').optional().isBoolean().toBoolean(),
+  query('format').optional().isIn(['excel', 'pdf']),
 ];
 
 export const employeeIdParamValidation = [
@@ -80,7 +77,6 @@ const pfEsicBodyFields = [
   body('effectiveDate').optional({ nullable: true }).isISO8601(),
   body('status').optional({ nullable: true }).isIn(['Active', 'Inactive', 'Pending', 'Suspended']),
   body('uanNumber').optional({ nullable: true }).isString(),
-  body('pfNumber').optional({ nullable: true }).isString(),
   body('pfJoiningDate').optional({ nullable: true }).isISO8601(),
   body('pfExitDate').optional({ nullable: true }).isISO8601(),
   body('pfNomineeName').optional({ nullable: true }).isString(),

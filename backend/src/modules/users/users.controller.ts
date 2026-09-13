@@ -3,7 +3,7 @@ import { usersService } from './users.service';
 import { getAuthContext } from '../auth/auth.context';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 import {
   CreateUserInput,
   UpdateUserInput,
@@ -21,10 +21,8 @@ function actor(req: Request) {
 export class UsersController {
   async list(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await usersService.list({
-      page,
-      pageSize,
+      ...pagination,
       search: req.query.search as string | undefined,
       isActive:
         req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined,
@@ -88,10 +86,8 @@ export class UsersController {
 
   async loginHistory(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await usersService.getLoginHistory(paramId(req), {
-      page,
-      pageSize,
+      ...pagination,
       loginStatus: req.query.loginStatus as string | undefined,
       dateFrom: req.query.dateFrom as string | undefined,
       dateTo: req.query.dateTo as string | undefined,

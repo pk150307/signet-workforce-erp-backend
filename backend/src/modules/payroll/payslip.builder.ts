@@ -21,6 +21,7 @@ export interface PayslipBuildInput {
   overtimePay: number;
   nightAllowance: number;
   punctualityAward: number;
+  bonus?: number;
   monthlyGross: number;
   statutoryConfig: StatutoryContributionConfig;
 }
@@ -71,6 +72,14 @@ export function buildPayslipBreakdown(input: PayslipBuildInput): PayslipBuildRes
     amount: roundOff(input.punctualityAward),
   });
 
+  const bonus = roundOff(input.bonus ?? 0);
+  earnings.push({
+    code: 'BONUS',
+    label: 'Bonus',
+    rate: null,
+    amount: bonus,
+  });
+
   if (input.specialEarned > 0 || input.gradeSpecial > 0) {
     earnings.push({
       code: 'SA',
@@ -87,6 +96,7 @@ export function buildPayslipBreakdown(input: PayslipBuildInput): PayslipBuildRes
     input.nightAllowance,
     input.punctualityAward,
     input.overtimePay,
+    bonus,
   );
 
   const esiGross = computeEsiGrossEarned(
@@ -102,6 +112,7 @@ export function buildPayslipBreakdown(input: PayslipBuildInput): PayslipBuildRes
     input.nightAllowance,
     input.punctualityAward,
     input.overtimePay,
+    bonus,
   );
 
   const pf = computeEmployeePf(input.basicEarned, input.statutoryConfig);
@@ -114,7 +125,7 @@ export function buildPayslipBreakdown(input: PayslipBuildInput): PayslipBuildRes
     deductions.push({
       code: 'PF',
       label: 'EPF',
-      note: `${input.statutoryConfig.employeePfPercentage}% of Basic Earned (max ₹${EMPLOYEE_PF_MAX_CONTRIBUTION.toLocaleString('en-IN')})`,
+      note: `${input.statutoryConfig.employeePfPercentage}% of Basic Earned (max ₹${(input.statutoryConfig.employeePfMaxAmount || EMPLOYEE_PF_MAX_CONTRIBUTION).toLocaleString('en-IN')})`,
       amount: pf,
     });
   }
