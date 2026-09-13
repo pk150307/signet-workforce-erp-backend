@@ -40,7 +40,9 @@ describe('Audit Logs API', () => {
     const res = await request(app).get('/api/audit-logs/export').set(authHeader(token));
 
     expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toContain('text/csv');
+    expect(res.headers['content-type']).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     expect(res.text).toContain('Created At');
   });
 });

@@ -39,6 +39,8 @@ import permissionsRoutes from './modules/roles/permissions.routes';
 import loginHistoryRoutes from './modules/login-history/login-history.routes';
 import deleteRequestsRoutes from './modules/delete-requests/delete-requests.routes';
 import auditLogsRoutes from './modules/audit-logs/audit-logs.routes';
+import salaryRegisterRoutes from './modules/salary-register/salary-register.routes';
+import employeeAdvancesRoutes from './modules/employee-advances/employee-advances.routes';
 
 export function createApp(): express.Application {
   const app = express();
@@ -136,6 +138,8 @@ export function createApp(): express.Application {
   app.use('/api/login-history', loginHistoryRoutes);
   app.use('/api/delete-requests', deleteRequestsRoutes);
   app.use('/api/audit-logs', auditLogsRoutes);
+  app.use('/api/salary-register', salaryRegisterRoutes);
+  app.use('/api/employee-advances', employeeAdvancesRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -81,7 +81,6 @@
  *       type: object
  *       properties:
  *         uanNumber: { type: string }
- *         pfNumber: { type: string }
  *         pfJoiningDate: { type: string, format: date }
  *         pfExitDate: { type: string, format: date }
  *         pfNomineeName: { type: string }
@@ -259,19 +258,19 @@
  *             schema:
  *               type: object
  *               properties:
- *                 code: { type: string, example: "SS-00001" }
+ *                 code: { type: string, example: "SIG-000001" }
  */
 /**
  * @openapi
  * /api/employees/export:
  *   get:
  *     tags: [Employees]
- *     summary: Export employees as CSV
+ *     summary: Export employees as Excel
  *     responses:
  *       200:
- *         description: CSV file
+ *         description: Excel (.xlsx) file
  *         content:
- *           text/csv: {}
+ *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
  */
 /**
  * @openapi

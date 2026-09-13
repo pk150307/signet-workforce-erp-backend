@@ -524,7 +524,7 @@
                   "properties": {
                     "code": {
                       "type": "string",
-                      "example": "SS-00001"
+                      "example": "SIG-000001"
                     }
                   }
                 }

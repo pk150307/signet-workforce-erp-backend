@@ -34,7 +34,7 @@ describe('Employees API', () => {
       .set(authHeader(token));
 
     expect(res.status).toBe(200);
-    expect(res.body.code).toMatch(/^SS-\d{5}$/);
+    expect(res.body.code).toMatch(/^SIG-\d{6}$/);
   });
 
   it('saves an employee draft', async () => {
@@ -50,7 +50,7 @@ describe('Employees API', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
-    expect(res.body.employeeCode).toMatch(/^SS-\d{5}$/);
+    expect(res.body.employeeCode).toMatch(/^SIG-\d{6}$/);
     draftEmployeeId = res.body.id;
   });
 
@@ -94,7 +94,12 @@ describe('Employees API', () => {
         departmentId: 'dept-001',
         designationId: 'des-002',
         basicSalary: 15000,
+        houseRentAllowance: 5000,
+        specialAllowance: 5000,
         grossSalary: 25000,
+        isPfApplicable: true,
+        isEsiApplicable: true,
+        isLwfApplicable: true,
         draftStep: 6,
       });
 
@@ -122,7 +127,11 @@ describe('Employees API', () => {
       departmentId: 'dept-001',
       designationId: 'des-002',
       basicSalary: 15000,
-      grossSalary: 25000,
+      houseRentAllowance: 4000,
+      specialAllowance: 6000,
+      isPfApplicable: true,
+      isEsiApplicable: false,
+      isLwfApplicable: true,
     };
 
     const res = await request(app)
@@ -132,7 +141,7 @@ describe('Employees API', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
-    expect(res.body.employeeCode).toMatch(/^SS-\d{5}$/);
+    expect(res.body.employeeCode).toMatch(/^SIG-\d{6}$/);
     createdEmployeeId = res.body.id;
   });
 
@@ -149,6 +158,13 @@ describe('Employees API', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
     expect(res.body.status).toBe(EmployeeLifecycleStatus.Active);
+    expect(res.body.basicSalary).toBe(15000);
+    expect(res.body.houseRentAllowance).toBe(4000);
+    expect(res.body.specialAllowance).toBe(6000);
+    expect(res.body.grossSalary).toBe(25000);
+    expect(res.body.isPfApplicable).toBe(true);
+    expect(res.body.isEsiApplicable).toBe(false);
+    expect(res.body.isLwfApplicable).toBe(true);
   });
 
   it('uploads employee profile photo', async () => {
