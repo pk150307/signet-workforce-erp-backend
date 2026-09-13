@@ -35,6 +35,8 @@ export const EMPLOYEE_PAY_GRADE_SELECT = `
   COALESCE(dg.house_rent_allowance, 0) AS grade_house_rent_allowance,
   COALESCE(dg.special_allowance, 0) AS grade_special_allowance,
   COALESCE(ed.basic_salary, e.basic_salary) AS employment_basic_salary,
+  COALESCE(ed.house_rent_allowance, e.house_rent_allowance, 0) AS employment_house_rent_allowance,
+  COALESCE(ed.special_allowance, e.special_allowance, 0) AS employment_special_allowance,
   COALESCE(ed.gross_salary, e.gross_salary) AS employment_gross_salary,
   dg.is_pf_applicable AS grade_is_pf_applicable,
   dg.is_esi_applicable AS grade_is_esi_applicable,
@@ -58,63 +60,74 @@ export interface ResolvedPayGrade {
 
 export function resolvePayGradeFromRow(row: Record<string, unknown>): ResolvedPayGrade {
   const gradeId = row.designation_grade_id != null ? String(row.designation_grade_id) : null;
-  let gradeBasic = toNumber(
-    (row.grade_basic_salary ?? row.basic_salary) as string | number | undefined,
-  );
-  let gradeHra = toNumber(
-    (row.grade_house_rent_allowance ?? row.house_rent_allowance) as string | number | undefined,
-  );
-  let gradeSpecial = toNumber(
-    (row.grade_special_allowance ?? row.special_allowance) as string | number | undefined,
-  );
+
+  // Employee Master compensation takes precedence over designation grade.
   const employmentBasic = toNumber(row.employment_basic_salary as string | number | undefined);
+  const employmentHra = toNumber(
+    row.employment_house_rent_allowance as string | number | undefined,
+  );
+  const employmentSpecial = toNumber(
+    row.employment_special_allowance as string | number | undefined,
+  );
   const employmentGross = toNumber(row.employment_gross_salary as string | number | undefined);
 
-  if (gradeBasic <= 0 && employmentBasic > 0) {
-    gradeBasic = employmentBasic;
-    if (gradeHra <= 0 && employmentGross > employmentBasic) {
-      gradeHra = Math.max(0, employmentGross - employmentBasic - gradeSpecial);
-    }
-  }
+  const gradeBasic = toNumber(
+    (row.grade_basic_salary ?? row.basic_salary) as string | number | undefined,
+  );
+  const gradeHra = toNumber(
+    (row.grade_house_rent_allowance ?? row.house_rent_allowance) as string | number | undefined,
+  );
+  const gradeSpecial = toNumber(
+    (row.grade_special_allowance ?? row.special_allowance) as string | number | undefined,
+  );
 
-  const hasGrade = gradeId != null && gradeBasic > 0;
-  const gradeComp = hasGrade
+  const basic = employmentBasic > 0 ? employmentBasic : gradeBasic;
+  const hra = employmentBasic > 0 || employmentHra > 0 || employmentSpecial > 0
+    ? employmentHra
+    : gradeHra;
+  const special = employmentBasic > 0 || employmentHra > 0 || employmentSpecial > 0
+    ? employmentSpecial
+    : gradeSpecial;
+
+  const hasCompensation = basic > 0 || hra > 0 || special > 0;
+  const gradeComp = hasCompensation
     ? {
-        basicSalary: gradeBasic,
-        houseRentAllowance: gradeHra,
-        specialAllowance: gradeSpecial,
+        basicSalary: basic,
+        houseRentAllowance: hra,
+        specialAllowance: special,
         grossSalary: computeGradeGross({
-          basicSalary: gradeBasic,
-          houseRentAllowance: gradeHra,
-          specialAllowance: gradeSpecial,
+          basicSalary: basic,
+          houseRentAllowance: hra,
+          specialAllowance: special,
         }),
       }
     : null;
 
-  const monthlyGross = gradeComp?.grossSalary ?? employmentGross;
+  const monthlyGross =
+    gradeComp?.grossSalary ??
+    (employmentGross > 0 ? employmentGross : 0);
 
-  const statutorySource: StatutorySourceRow | null = gradeId
-    ? {
-        is_pf_applicable: row.grade_is_pf_applicable as boolean | null,
-        is_esi_applicable: row.grade_is_esi_applicable as boolean | null,
-        employee_pf_percentage: row.grade_employee_pf_percentage as string | null,
-        employee_esi_percentage: row.grade_employee_esi_percentage as string | null,
-        employer_pf_percentage: row.grade_employer_pf_percentage as string | null,
-        employer_esi_percentage: row.grade_employer_esi_percentage as string | null,
-        is_lwf_applicable: row.grade_is_lwf_applicable as boolean | null,
-        employee_lwf_percentage: row.grade_employee_lwf_percentage as string | null,
-        employee_lwf_max_amount: row.grade_employee_lwf_max_amount as string | null,
-      }
-    : null;
+  // Prefer employee statutory flags; grade rates remain available as fallback for percentages.
+  const statutorySource: StatutorySourceRow | null = {
+    is_pf_applicable: row.grade_is_pf_applicable as boolean | null,
+    is_esi_applicable: row.grade_is_esi_applicable as boolean | null,
+    employee_pf_percentage: row.grade_employee_pf_percentage as string | null,
+    employee_esi_percentage: row.grade_employee_esi_percentage as string | null,
+    employer_pf_percentage: row.grade_employer_pf_percentage as string | null,
+    employer_esi_percentage: row.grade_employer_esi_percentage as string | null,
+    is_lwf_applicable: row.grade_is_lwf_applicable as boolean | null,
+    employee_lwf_percentage: row.grade_employee_lwf_percentage as string | null,
+    employee_lwf_max_amount: row.grade_employee_lwf_max_amount as string | null,
+  };
 
   return {
     gradeComp,
     gradeId,
-    statutorySource,
+    statutorySource: gradeId ? statutorySource : null,
     monthlyGross,
-    gradeBasicRate: gradeBasic,
-    gradeHraRate: gradeHra,
-    gradeSpecialRate: gradeSpecial,
+    gradeBasicRate: basic,
+    gradeHraRate: hra,
+    gradeSpecialRate: special,
   };
 }
 

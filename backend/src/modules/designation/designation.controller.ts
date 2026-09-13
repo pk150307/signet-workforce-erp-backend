@@ -7,15 +7,13 @@ import {
 } from '../delete-requests/delete-action.util';
 import { designationService } from './designation.service';
 import { CreateDesignationInput, UpdateDesignationInput } from './designation.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 export class DesignationController {
   async list(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await designationService.list({
-      page,
-      pageSize,
+      ...pagination,
       clientId: req.query.clientId as string | undefined,
       search: req.query.search as string | undefined,
       departmentId: req.query.departmentId as string | undefined,

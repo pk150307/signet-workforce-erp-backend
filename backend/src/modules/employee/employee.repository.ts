@@ -43,15 +43,24 @@ import {
 } from '../../utils/organization';
 import { formatDate, formatDateTime, toNumber } from '../../utils/formatters';
 import { nextEmployeeCode } from '../../utils/next-code';
+import { buildExcelBuffer } from '../../utils/excel-export';
+import { buildPdfTableBuffer } from '../../utils/pdf-export';
 import {
   getStoredFileReference,
   resolveFileUrl,
   UploadedFile,
 } from '../documents/upload.config';
-import { designationGradeRepository } from '../designation-grade/designation-grade.repository';
-import { computeGradeGross } from '../designation-grade/designation-grade.types';
-
 type DbClient = Pick<PoolClient, 'query'>;
+
+interface ResolvedCompensation {
+  departmentId: string;
+  designationId: string;
+  designationGradeId: string | null;
+  basicSalary: number;
+  houseRentAllowance: number;
+  specialAllowance: number;
+  grossSalary: number;
+}
 
 export class EmployeeRepository {
   private async run<T extends Record<string, unknown>>(
@@ -96,8 +105,11 @@ export class EmployeeRepository {
         resignation_date = ed.resignation_date,
         relieving_date = ed.relieving_date,
         basic_salary = COALESCE(ed.basic_salary, e.basic_salary),
+        house_rent_allowance = COALESCE(ed.house_rent_allowance, e.house_rent_allowance),
+        special_allowance = COALESCE(ed.special_allowance, e.special_allowance),
         gross_salary = COALESCE(ed.gross_salary, e.gross_salary),
         ctc = COALESCE(ed.ctc, e.ctc),
+        client_soft_code = COALESCE(ed.client_soft_code, e.client_soft_code),
         bank_name = bd.bank_name,
         account_number = bd.account_number,
         ifsc_code = bd.ifsc_code,
@@ -213,7 +225,9 @@ export class EmployeeRepository {
   }
 
   async emailExists(email: string, excludeId?: string): Promise<boolean> {
-    const params: unknown[] = [email.toLowerCase()];
+    const normalized = email?.trim().toLowerCase();
+    if (!normalized) return false;
+    const params: unknown[] = [normalized];
     let sql = 'SELECT 1 FROM employees WHERE LOWER(email) = $1 AND NOT is_deleted';
     if (excludeId) {
       sql += ' AND id != $2';
@@ -228,7 +242,7 @@ export class EmployeeRepository {
       id: String(r.id),
       employeeCode: String(r.employee_code),
       fullName: `${r.first_name} ${r.last_name}`.trim(),
-      email: String(r.email),
+      email: r.email ? String(r.email) : '',
       phone: String(r.phone),
       department: String(r.department_name ?? ''),
       designation: String(r.designation_name ?? ''),
@@ -246,7 +260,8 @@ export class EmployeeRepository {
       employeeCode: String(r.employee_code),
       firstName: String(r.first_name),
       lastName: String(r.last_name),
-      email: String(r.email),
+      fatherName: r.father_name ? String(r.father_name) : null,
+      email: r.email ? String(r.email) : '',
       phone: String(r.phone),
       alternatePhone: r.alternate_phone ? String(r.alternate_phone) : null,
       dateOfBirth: formatDate(String(r.date_of_birth))!,
@@ -274,6 +289,7 @@ export class EmployeeRepository {
       siteName: r.site_name ? String(r.site_name) : null,
       clientId: r.client_id ? String(r.client_id) : null,
       clientName: r.client_company_name ? String(r.client_company_name) : null,
+      clientSoftCode: r.client_soft_code ? String(r.client_soft_code) : null,
       presentAddress: r.present_address ? String(r.present_address) : null,
       permanentAddress: r.permanent_address ? String(r.permanent_address) : null,
       city: r.city ? String(r.city) : null,
@@ -283,13 +299,23 @@ export class EmployeeRepository {
       accountNumber: r.account_number ? String(r.account_number) : null,
       ifscCode: r.ifsc_code ? String(r.ifsc_code) : null,
       accountHolderName: r.account_holder_name ? String(r.account_holder_name) : null,
-      pfNumber: r.pf_number ? String(r.pf_number) : null,
       esiNumber: r.esi_number ? String(r.esi_number) : null,
       panNumber: r.pan_number ? String(r.pan_number) : null,
       aadhaarNumber: r.aadhaar_number ? String(r.aadhaar_number) : null,
       uanNumber: r.uan_number ? String(r.uan_number) : null,
       basicSalary: toNumber(r.basic_salary as string),
+      houseRentAllowance: toNumber(r.house_rent_allowance as string),
+      specialAllowance: toNumber(r.special_allowance as string),
       grossSalary: toNumber(r.gross_salary as string),
+      isPfApplicable: r.is_pf_applicable == null ? true : Boolean(r.is_pf_applicable),
+      isEsiApplicable: r.is_esi_applicable == null ? true : Boolean(r.is_esi_applicable),
+      isLwfApplicable: r.is_lwf_applicable == null ? true : Boolean(r.is_lwf_applicable),
+      employeePfPercentage: toNumber(r.employee_pf_percentage as string) || 12,
+      employeeEsiPercentage: toNumber(r.employee_esi_percentage as string) || 0.75,
+      employeeLwfPercentage: toNumber(r.employee_lwf_percentage as string) || 0.2,
+      employeePfMaxAmount: toNumber(r.employee_pf_max_amount as string) || 1800,
+      employeeEsiMaxAmount: toNumber(r.employee_esi_max_amount as string),
+      employeeLwfMaxAmount: toNumber(r.employee_lwf_max_amount as string) || 35,
       ctc: r.ctc != null ? toNumber(r.ctc as string) : null,
       shiftId: r.shift_id ? String(r.shift_id) : null,
       draftStep: Number(r.draft_step ?? 0),
@@ -314,6 +340,7 @@ export class EmployeeRepository {
     LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
     LEFT JOIN clients cl ON cl.id = s.client_id AND NOT cl.is_deleted
     LEFT JOIN employee_bank_details bd ON bd.employee_id = e.id
+    LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
     LEFT JOIN LATERAL (
       SELECT contact_name AS emergency_contact_name,
              relationship AS emergency_contact_relationship,
@@ -331,6 +358,7 @@ export class EmployeeRepository {
     e.created_at, e.updated_at,
     COALESCE(pd.first_name, e.first_name) AS first_name,
     COALESCE(pd.last_name, e.last_name) AS last_name,
+    pd.father_name AS father_name,
     COALESCE(pd.alternate_phone, e.alternate_phone) AS alternate_phone,
     COALESCE(pd.date_of_birth, e.date_of_birth) AS date_of_birth,
     COALESCE(pd.gender, e.gender) AS gender,
@@ -347,8 +375,20 @@ export class EmployeeRepository {
     COALESCE(ed.site_id, e.site_id) AS site_id,
     COALESCE(ed.shift_id, e.shift_id) AS shift_id,
     COALESCE(ed.basic_salary, e.basic_salary) AS basic_salary,
+    COALESCE(ed.house_rent_allowance, e.house_rent_allowance, 0) AS house_rent_allowance,
+    COALESCE(ed.special_allowance, e.special_allowance, 0) AS special_allowance,
     COALESCE(ed.gross_salary, e.gross_salary) AS gross_salary,
     COALESCE(ed.ctc, e.ctc) AS ctc,
+    COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
+    COALESCE(esd.is_pf_applicable, TRUE) AS is_pf_applicable,
+    COALESCE(esd.is_esi_applicable, TRUE) AS is_esi_applicable,
+    COALESCE(esd.is_lwf_applicable, TRUE) AS is_lwf_applicable,
+    COALESCE(esd.employee_pf_percentage, 12) AS employee_pf_percentage,
+    COALESCE(esd.employee_esi_percentage, 0.75) AS employee_esi_percentage,
+    COALESCE(esd.employee_lwf_percentage, 0.20) AS employee_lwf_percentage,
+    COALESCE(esd.employee_pf_max_amount, 1800) AS employee_pf_max_amount,
+    COALESCE(esd.employee_esi_max_amount, 0) AS employee_esi_max_amount,
+    COALESCE(esd.employee_lwf_max_amount, 35) AS employee_lwf_max_amount,
     d.id AS department_id, d.code AS department_code, d.name AS department_name,
     des.id AS designation_id, des.code AS designation_code, des.name AS designation_name,
     dg.id AS grade_uuid, dg.code AS grade_code, dg.name AS grade_name,
@@ -408,9 +448,15 @@ export class EmployeeRepository {
     }
 
     if (filter.status !== 'all' && filter.status !== undefined) {
-      conditions.push(`e.status = $${paramIndex}`);
-      params.push(filter.status);
-      paramIndex++;
+      if (filter.status === EmployeeLifecycleStatus.Active) {
+        conditions.push(`e.status IN ($${paramIndex}, $${paramIndex + 1})`);
+        params.push(EmployeeLifecycleStatus.Active, EmployeeLifecycleStatus.Rejoined);
+        paramIndex += 2;
+      } else {
+        conditions.push(`e.status = $${paramIndex}`);
+        params.push(filter.status);
+        paramIndex++;
+      }
     }
 
     if (filter.employmentType !== undefined) {
@@ -599,7 +645,10 @@ export class EmployeeRepository {
     }));
   }
 
-  private async resolveOrgIds(input: SaveEmployeeDraftInput, client?: DbClient) {
+  private async resolveOrgIds(
+    input: SaveEmployeeDraftInput,
+    client?: DbClient,
+  ): Promise<ResolvedCompensation> {
     const departmentRef = input.departmentId?.trim();
     const designationRef = input.designationId?.trim();
     const d = this.draftDefaults(input);
@@ -624,37 +673,65 @@ export class EmployeeRepository {
         : defaults.designationId;
     }
 
+    // Pay grade is optional/legacy only — salary always comes from Employee Master fields.
     let designationGradeId: string | null = null;
-    let basicSalary = input.basicSalary ?? d.basicSalary;
-    let grossSalary = input.grossSalary ?? d.grossSalary;
-
     if (input.designationGradeId?.trim()) {
       designationGradeId = await resolveDesignationGradeId(input.designationGradeId.trim(), {
         ...orgOptions,
         designationId,
       });
-      const grade = await designationGradeRepository.findById(designationGradeId);
-      if (grade) {
-        if (input.basicSalary == null) basicSalary = grade.basicSalary;
-        if (input.grossSalary == null) grossSalary = grade.grossSalary ?? computeGradeGross(grade);
-      }
     }
 
-    return { departmentId, designationId, designationGradeId, basicSalary, grossSalary };
+    const basicSalary = input.basicSalary ?? d.basicSalary;
+    const houseRentAllowance = input.houseRentAllowance ?? d.houseRentAllowance;
+    const specialAllowance = input.specialAllowance ?? d.specialAllowance;
+    const computedGross = basicSalary + houseRentAllowance + specialAllowance;
+    const grossSalary =
+      input.grossSalary != null && input.grossSalary > 0
+        ? input.grossSalary
+        : computedGross > 0
+          ? computedGross
+          : d.grossSalary;
+
+    return {
+      departmentId,
+      designationId,
+      designationGradeId,
+      basicSalary,
+      houseRentAllowance,
+      specialAllowance,
+      grossSalary,
+    };
   }
 
   private draftDefaults(input: SaveEmployeeDraftInput) {
     const firstName = input.firstName?.trim() || 'Draft';
     const lastName = input.lastName?.trim() || 'Employee';
-    const email = input.email?.trim().toLowerCase() || `draft-${Date.now()}@draft.signet.local`;
+    const email = input.email?.trim().toLowerCase() || null;
     const phone = input.phone?.trim() || '0000000000';
     const dateOfBirth = input.dateOfBirth || '1990-01-01';
     const gender = input.gender ?? 4;
     const joiningDate = input.joiningDate || formatDate(new Date())!;
     const employmentType = input.employmentType ?? 1;
     const basicSalary = input.basicSalary ?? 0;
-    const grossSalary = input.grossSalary ?? 0;
-    return { firstName, lastName, email, phone, dateOfBirth, gender, joiningDate, employmentType, basicSalary, grossSalary };
+    const houseRentAllowance = input.houseRentAllowance ?? 0;
+    const specialAllowance = input.specialAllowance ?? 0;
+    const grossSalary =
+      input.grossSalary ?? basicSalary + houseRentAllowance + specialAllowance;
+    return {
+      firstName,
+      lastName,
+      email,
+      phone,
+      dateOfBirth,
+      gender,
+      joiningDate,
+      employmentType,
+      basicSalary,
+      houseRentAllowance,
+      specialAllowance,
+      grossSalary,
+    };
   }
 
   private async upsertNormalized(
@@ -665,17 +742,20 @@ export class EmployeeRepository {
     designationId: string,
     designationGradeId: string | null,
     basicSalary: number,
+    houseRentAllowance: number,
+    specialAllowance: number,
     grossSalary: number,
   ): Promise<void> {
     const d = this.draftDefaults(input);
 
     await client.query(
       `INSERT INTO employee_personal_details (
-        employee_id, first_name, last_name, alternate_phone, date_of_birth, gender,
+        employee_id, first_name, last_name, father_name, alternate_phone, date_of_birth, gender,
         present_address, permanent_address, city, state, pin_code, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (employee_id) DO UPDATE SET
         first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
+        father_name = EXCLUDED.father_name,
         alternate_phone = EXCLUDED.alternate_phone, date_of_birth = EXCLUDED.date_of_birth,
         gender = EXCLUDED.gender, present_address = EXCLUDED.present_address,
         permanent_address = EXCLUDED.permanent_address, city = EXCLUDED.city,
@@ -685,6 +765,7 @@ export class EmployeeRepository {
         employeeId,
         input.firstName?.trim() || d.firstName,
         input.lastName?.trim() || d.lastName,
+        input.fatherName?.trim() || null,
         input.alternatePhone ?? null,
         input.dateOfBirth || d.dateOfBirth,
         input.gender ?? d.gender,
@@ -702,13 +783,16 @@ export class EmployeeRepository {
       [employeeId],
     );
 
+    const clientSoftCode = input.clientSoftCode?.trim() || null;
+
     if (empRows[0]) {
       await client.query(
         `UPDATE employee_employment_details SET
           employment_type = $2, department_id = $3, designation_id = $4, designation_grade_id = $5,
           reporting_manager_id = $6, site_id = $7, shift_id = $8,
-          joining_date = $9, basic_salary = $10, gross_salary = $11, ctc = $12,
-          updated_at = NOW(), updated_by = $13
+          joining_date = $9, basic_salary = $10, house_rent_allowance = $11,
+          special_allowance = $12, gross_salary = $13, ctc = $14, client_soft_code = $15,
+          updated_at = NOW(), updated_by = $16
          WHERE id = $1`,
         [
           empRows[0].id,
@@ -721,8 +805,11 @@ export class EmployeeRepository {
           parseOptionalUuid(input.shiftId),
           input.joiningDate || d.joiningDate,
           basicSalary,
+          houseRentAllowance,
+          specialAllowance,
           grossSalary,
           input.ctc ?? null,
+          clientSoftCode,
           input.createdBy,
         ],
       );
@@ -731,8 +818,9 @@ export class EmployeeRepository {
         `INSERT INTO employee_employment_details (
           employee_id, employment_type, department_id, designation_id, designation_grade_id,
           reporting_manager_id, site_id, shift_id, joining_date,
-          basic_salary, gross_salary, ctc, is_current, period_sequence, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE,1,$13)`,
+          basic_salary, house_rent_allowance, special_allowance, gross_salary, ctc, client_soft_code,
+          is_current, period_sequence, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,1,$16)`,
         [
           employeeId,
           input.employmentType ?? d.employmentType,
@@ -744,8 +832,11 @@ export class EmployeeRepository {
           parseOptionalUuid(input.shiftId),
           input.joiningDate || d.joiningDate,
           basicSalary,
+          houseRentAllowance,
+          specialAllowance,
           grossSalary,
           input.ctc ?? null,
+          clientSoftCode,
           input.createdBy,
         ],
       );
@@ -789,32 +880,87 @@ export class EmployeeRepository {
       );
     }
 
-    const emailValue = input.email?.trim().toLowerCase();
+    const emailProvided = Object.prototype.hasOwnProperty.call(input, 'email');
+    const emailValue = emailProvided ? (input.email?.trim().toLowerCase() || null) : null;
     const phoneValue = input.phone?.trim();
 
     await client.query(
       `UPDATE employees SET
-        email = COALESCE($2, email),
+        email = CASE WHEN $15 THEN $2 ELSE email END,
         phone = COALESCE($3, phone),
         draft_step = COALESCE($4, draft_step),
-        pf_number = COALESCE($5, pf_number),
-        esi_number = COALESCE($6, esi_number),
-        pan_number = COALESCE($7, pan_number),
-        aadhaar_number = COALESCE($8, aadhaar_number),
-        uan_number = COALESCE($9, uan_number),
+        esi_number = COALESCE($5, esi_number),
+        pan_number = COALESCE($6, pan_number),
+        aadhaar_number = COALESCE($7, aadhaar_number),
+        uan_number = COALESCE($8, uan_number),
+        basic_salary = $9,
+        house_rent_allowance = $10,
+        special_allowance = $11,
+        gross_salary = $12,
+        client_soft_code = COALESCE($13, client_soft_code),
         updated_at = NOW(),
-        updated_by = $10
+        updated_by = $14
        WHERE id = $1`,
       [
         employeeId,
-        emailValue ?? null,
+        emailValue,
         phoneValue ?? null,
         input.draftStep ?? null,
-        input.pfNumber ?? null,
         input.esiNumber ?? input.esicNumber ?? null,
         input.panNumber ?? null,
         input.aadhaarNumber ?? null,
         input.uanNumber ?? null,
+        basicSalary,
+        houseRentAllowance,
+        specialAllowance,
+        grossSalary,
+        clientSoftCode,
+        input.createdBy,
+        emailProvided,
+      ],
+    );
+
+    await client.query(
+      `INSERT INTO employee_statutory_details (
+        employee_id, uan_number, pf_number, esi_number,
+        is_pf_applicable, is_esi_applicable, is_lwf_applicable,
+        employee_pf_percentage, employee_esi_percentage, employee_lwf_percentage,
+        employee_pf_max_amount, employee_esi_max_amount, employee_lwf_max_amount, created_by
+      ) VALUES (
+        $1, $2, $3, $4,
+        COALESCE($5, TRUE), COALESCE($6, TRUE), COALESCE($7, TRUE),
+        COALESCE($8, 12), COALESCE($9, 0.75), COALESCE($10, 0.20),
+        COALESCE($11, 1800), COALESCE($12, 0), COALESCE($13, 35), $14
+      )
+      ON CONFLICT (employee_id) DO UPDATE SET
+        uan_number = COALESCE(EXCLUDED.uan_number, employee_statutory_details.uan_number),
+        pf_number = COALESCE(EXCLUDED.pf_number, employee_statutory_details.pf_number),
+        esi_number = COALESCE(EXCLUDED.esi_number, employee_statutory_details.esi_number),
+        is_pf_applicable = COALESCE($5, employee_statutory_details.is_pf_applicable),
+        is_esi_applicable = COALESCE($6, employee_statutory_details.is_esi_applicable),
+        is_lwf_applicable = COALESCE($7, employee_statutory_details.is_lwf_applicable),
+        employee_pf_percentage = COALESCE($8, employee_statutory_details.employee_pf_percentage),
+        employee_esi_percentage = COALESCE($9, employee_statutory_details.employee_esi_percentage),
+        employee_lwf_percentage = COALESCE($10, employee_statutory_details.employee_lwf_percentage),
+        employee_pf_max_amount = COALESCE($11, employee_statutory_details.employee_pf_max_amount),
+        employee_esi_max_amount = COALESCE($12, employee_statutory_details.employee_esi_max_amount),
+        employee_lwf_max_amount = COALESCE($13, employee_statutory_details.employee_lwf_max_amount),
+        updated_at = NOW(),
+        updated_by = EXCLUDED.created_by`,
+      [
+        employeeId,
+        input.uanNumber ?? null,
+        null,
+        input.esiNumber ?? input.esicNumber ?? null,
+        input.isPfApplicable ?? null,
+        input.isEsiApplicable ?? null,
+        input.isLwfApplicable ?? null,
+        input.employeePfPercentage ?? null,
+        input.employeeEsiPercentage ?? null,
+        input.employeeLwfPercentage ?? null,
+        input.employeePfMaxAmount ?? null,
+        input.employeeEsiMaxAmount ?? null,
+        input.employeeLwfMaxAmount ?? null,
         input.createdBy,
       ],
     );
@@ -823,8 +969,15 @@ export class EmployeeRepository {
   }
 
   async create(input: CreateEmployeeInput): Promise<CreateEmployeeResult> {
-    const { departmentId, designationId, designationGradeId, basicSalary, grossSalary } =
-      await this.resolveOrgIds(input);
+    const {
+      departmentId,
+      designationId,
+      designationGradeId,
+      basicSalary,
+      houseRentAllowance,
+      specialAllowance,
+      grossSalary,
+    } = await this.resolveOrgIds(input);
     const employeeCode = await this.getNextEmployeeCode();
 
     return withTransaction(async (client) => {
@@ -834,22 +987,22 @@ export class EmployeeRepository {
           date_of_birth, gender, joining_date, employment_type, status,
           department_id, designation_id, designation_grade_id, reporting_manager_id, site_id, shift_id,
           present_address, permanent_address, city, state, pin_code,
-          basic_salary, gross_salary, ctc, pf_number, esi_number, pan_number,
-          aadhaar_number, uan_number, created_by
+          basic_salary, house_rent_allowance, special_allowance, gross_salary, ctc,
+          pf_number, esi_number, pan_number, aadhaar_number, uan_number, created_by
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33
         ) RETURNING id`,
         [
           employeeCode,
           input.firstName,
           input.lastName,
-          input.email.toLowerCase(),
+          input.email?.trim().toLowerCase() || null,
           input.phone,
           input.alternatePhone ?? null,
           input.dateOfBirth,
           input.gender,
           input.joiningDate,
-          input.employmentType,
+          input.employmentType ?? 1,
           EmployeeLifecycleStatus.Active,
           departmentId,
           designationId,
@@ -863,9 +1016,11 @@ export class EmployeeRepository {
           input.state ?? null,
           input.pinCode ?? null,
           basicSalary,
+          houseRentAllowance,
+          specialAllowance,
           grossSalary,
           null,
-          input.pfNumber ?? null,
+          null,
           input.esiNumber ?? input.esicNumber ?? null,
           input.panNumber ?? null,
           input.aadhaarNumber ?? null,
@@ -883,6 +1038,8 @@ export class EmployeeRepository {
         designationId,
         designationGradeId,
         basicSalary,
+        houseRentAllowance,
+        specialAllowance,
         grossSalary,
       );
       await this.insertHistory(
@@ -899,8 +1056,15 @@ export class EmployeeRepository {
   }
 
   async saveDraft(input: SaveEmployeeDraftInput): Promise<CreateEmployeeResult> {
-    const { departmentId, designationId, designationGradeId, basicSalary, grossSalary } =
-      await this.resolveOrgIds(input);
+    const {
+      departmentId,
+      designationId,
+      designationGradeId,
+      basicSalary,
+      houseRentAllowance,
+      specialAllowance,
+      grossSalary,
+    } = await this.resolveOrgIds(input);
     const d = this.draftDefaults(input);
 
     if (input.id) {
@@ -919,6 +1083,8 @@ export class EmployeeRepository {
           designationId,
           designationGradeId,
           basicSalary,
+          houseRentAllowance,
+          specialAllowance,
           grossSalary,
         );
         await client.query(
@@ -939,7 +1105,7 @@ export class EmployeeRepository {
     }
 
     const employeeCode =
-      input.employeeCode && /^SS-\d{5}$/i.test(input.employeeCode)
+      input.employeeCode && /^SIG-\d{6}$/i.test(input.employeeCode)
         ? input.employeeCode.toUpperCase()
         : await this.getNextEmployeeCode();
 
@@ -948,8 +1114,8 @@ export class EmployeeRepository {
         `INSERT INTO employees (
           employee_code, first_name, last_name, email, phone, date_of_birth, gender,
           joining_date, employment_type, status, department_id, designation_id, designation_grade_id,
-          basic_salary, gross_salary, draft_step, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          basic_salary, house_rent_allowance, special_allowance, gross_salary, draft_step, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         RETURNING id`,
         [
           employeeCode,
@@ -966,6 +1132,8 @@ export class EmployeeRepository {
           designationId,
           designationGradeId,
           basicSalary,
+          houseRentAllowance,
+          specialAllowance,
           grossSalary,
           input.draftStep ?? 1,
           input.createdBy,
@@ -980,6 +1148,8 @@ export class EmployeeRepository {
         designationId,
         designationGradeId,
         basicSalary,
+        houseRentAllowance,
+        specialAllowance,
         grossSalary,
       );
       await this.insertHistory(
@@ -1012,7 +1182,7 @@ export class EmployeeRepository {
       const r = rows[0];
       if (!r) throw new Error('NOT_FOUND');
 
-      if (!r.first_name || !r.last_name || !r.email || !r.phone || !r.date_of_birth || !r.joining_date) {
+      if (!r.first_name || !r.last_name || !r.phone || !r.date_of_birth || !r.joining_date) {
         throw new Error('INCOMPLETE');
       }
 
@@ -1042,8 +1212,15 @@ export class EmployeeRepository {
     const existing = await this.findById(input.id);
     if (!existing) throw new Error('NOT_FOUND');
 
-    const { departmentId, designationId, designationGradeId, basicSalary, grossSalary } =
-      await this.resolveOrgIds(input);
+    const {
+      departmentId,
+      designationId,
+      designationGradeId,
+      basicSalary,
+      houseRentAllowance,
+      specialAllowance,
+      grossSalary,
+    } = await this.resolveOrgIds(input);
 
     await withTransaction(async (client) => {
       if (input.status !== undefined) {
@@ -1058,6 +1235,8 @@ export class EmployeeRepository {
         designationId,
         designationGradeId,
         basicSalary,
+        houseRentAllowance,
+        specialAllowance,
         grossSalary,
       );
       await this.insertHistory(
@@ -1203,7 +1382,7 @@ export class EmployeeRepository {
          WHERE id = $1`,
         [
           input.employeeId,
-          EmployeeLifecycleStatus.Rejoined,
+          EmployeeLifecycleStatus.Active,
           input.joiningDate,
           departmentId,
           designationId,
@@ -1224,7 +1403,7 @@ export class EmployeeRepository {
         [
           input.employeeId,
           rows[0].status,
-          EmployeeLifecycleStatus.Rejoined,
+          EmployeeLifecycleStatus.Active,
           input.joiningDate,
           input.changedBy,
         ],
@@ -1549,7 +1728,7 @@ export class EmployeeRepository {
     return result;
   }
 
-  async exportEmployees(): Promise<string> {
+  async exportEmployees(format: 'excel' | 'pdf' = 'excel'): Promise<Buffer> {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.employee_code,
               COALESCE(pd.first_name, e.first_name) AS first_name,
@@ -1569,33 +1748,31 @@ export class EmployeeRepository {
        ORDER BY e.employee_code`,
     );
 
-    const escape = (value: unknown) => {
-      const str = value == null ? '' : String(value);
-      return `"${str.replace(/"/g, '""')}"`;
-    };
+    const dataRows: Array<Array<string | number | null | undefined>> = rows.map((r) => [
+      String(r.employee_code ?? ''),
+      String(r.first_name ?? ''),
+      String(r.last_name ?? ''),
+      String(r.email ?? ''),
+      String(r.phone ?? ''),
+      r.status == null ? '' : Number(r.status),
+      String(r.department ?? ''),
+      String(r.designation ?? ''),
+      r.site == null ? '' : String(r.site),
+      formatDate(String(r.joining_date)),
+      r.basic_salary == null ? '' : Number(r.basic_salary),
+      r.gross_salary == null ? '' : Number(r.gross_salary),
+    ]);
 
-    const lines = [BULK_EXPORT_HEADERS.join(',')];
-    for (const r of rows) {
-      lines.push(
-        [
-          r.employee_code,
-          r.first_name,
-          r.last_name,
-          r.email,
-          r.phone,
-          r.status,
-          r.department,
-          r.designation,
-          r.site ?? '',
-          formatDate(String(r.joining_date)),
-          r.basic_salary,
-          r.gross_salary,
-        ]
-          .map(escape)
-          .join(','),
-      );
+    if (format === 'pdf') {
+      return buildPdfTableBuffer({
+        title: 'Employees',
+        headers: [...BULK_EXPORT_HEADERS],
+        rows: dataRows,
+        landscape: true,
+      });
     }
-    return lines.join('\n');
+
+    return buildExcelBuffer('Employees', [...BULK_EXPORT_HEADERS], dataRows);
   }
 
   documentExistsOnDisk(filePath: string): boolean {

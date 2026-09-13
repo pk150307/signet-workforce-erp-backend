@@ -3,7 +3,7 @@ import { rolesService } from './roles.service';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { CreateRoleInput, UpdateRoleInput } from './roles.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 function actor(req: Request) {
   return {
@@ -15,10 +15,8 @@ function actor(req: Request) {
 export class RolesController {
   async list(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const result = await rolesService.list({
-      page,
-      pageSize,
+      ...pagination,
       search: req.query.search as string | undefined,
       isActive:
         req.query.isActive === 'true' ? true : req.query.isActive === 'false' ? false : undefined,

@@ -26,6 +26,7 @@ export interface EmployeeDetail {
   employeeCode: string;
   firstName: string;
   lastName: string;
+  fatherName: string | null;
   email: string;
   phone: string;
   alternatePhone: string | null;
@@ -52,6 +53,7 @@ export interface EmployeeDetail {
   siteName: string | null;
   clientId: string | null;
   clientName: string | null;
+  clientSoftCode: string | null;
   presentAddress: string | null;
   permanentAddress: string | null;
   city: string | null;
@@ -61,13 +63,23 @@ export interface EmployeeDetail {
   accountNumber: string | null;
   ifscCode: string | null;
   accountHolderName: string | null;
-  pfNumber: string | null;
   esiNumber: string | null;
   panNumber: string | null;
   aadhaarNumber: string | null;
   uanNumber: string | null;
   basicSalary: number;
+  houseRentAllowance: number;
+  specialAllowance: number;
   grossSalary: number;
+  isPfApplicable: boolean;
+  isEsiApplicable: boolean;
+  isLwfApplicable: boolean;
+  employeePfPercentage: number;
+  employeeEsiPercentage: number;
+  employeeLwfPercentage: number;
+  employeePfMaxAmount: number;
+  employeeEsiMaxAmount: number;
+  employeeLwfMaxAmount: number;
   ctc: number | null;
   shiftId: string | null;
   draftStep: number;
@@ -172,6 +184,7 @@ export interface SaveEmployeeDraftInput {
   employeeCode?: string;
   firstName?: string;
   lastName?: string;
+  fatherName?: string;
   email?: string;
   phone?: string;
   alternatePhone?: string;
@@ -185,6 +198,7 @@ export interface SaveEmployeeDraftInput {
   reportingManagerId?: string;
   siteId?: string;
   clientId?: string;
+  clientSoftCode?: string;
   shiftId?: string;
   presentAddress?: string;
   permanentAddress?: string;
@@ -192,13 +206,23 @@ export interface SaveEmployeeDraftInput {
   state?: string;
   pinCode?: string;
   basicSalary?: number;
+  houseRentAllowance?: number;
+  specialAllowance?: number;
   grossSalary?: number;
+  isPfApplicable?: boolean;
+  isEsiApplicable?: boolean;
+  isLwfApplicable?: boolean;
+  employeePfPercentage?: number;
+  employeeEsiPercentage?: number;
+  employeeLwfPercentage?: number;
+  employeePfMaxAmount?: number;
+  employeeEsiMaxAmount?: number;
+  employeeLwfMaxAmount?: number;
   ctc?: number;
   bankName?: string;
   accountNumber?: string;
   ifscCode?: string;
   accountHolderName?: string;
-  pfNumber?: string;
   esiNumber?: string;
   esicNumber?: string;
   panNumber?: string;
@@ -214,16 +238,18 @@ export interface SaveEmployeeDraftInput {
 export interface CreateEmployeeInput extends SaveEmployeeDraftInput {
   firstName: string;
   lastName: string;
-  email: string;
+  email?: string;
   phone: string;
   dateOfBirth: string;
   gender: Gender;
   joiningDate: string;
-  employmentType: EmploymentType;
+  employmentType?: EmploymentType;
   departmentId: string;
   designationId: string;
   basicSalary: number;
-  grossSalary: number;
+  houseRentAllowance?: number;
+  specialAllowance?: number;
+  grossSalary?: number;
 }
 
 export interface UpdateEmployeeInput extends SaveEmployeeDraftInput {
@@ -248,6 +274,8 @@ export interface RejoinEmployeeInput {
   reportingManagerId?: string;
   reuseEmployeeCode: boolean;
   basicSalary?: number;
+  houseRentAllowance?: number;
+  specialAllowance?: number;
   grossSalary?: number;
   changedBy: string;
 }
@@ -264,6 +292,8 @@ export interface BulkImportRow {
   departmentId: string;
   designationId: string;
   basicSalary: number;
+  houseRentAllowance?: number;
+  specialAllowance?: number;
   grossSalary: number;
 }
 

@@ -230,11 +230,20 @@ export class EmployeeController {
     sendSuccess(res, result);
   }
 
-  async exportEmployees(_req: Request, res: Response): Promise<void> {
-    const csv = await employeeService.exportEmployees();
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="employees-export.csv"');
-    res.status(200).send(csv);
+  async exportEmployees(req: Request, res: Response): Promise<void> {
+    const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
+    const buffer = await employeeService.exportEmployees(format);
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="employees-export.pdf"');
+    } else {
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', 'attachment; filename="employees-export.xlsx"');
+    }
+    res.status(200).send(buffer);
   }
 }
 

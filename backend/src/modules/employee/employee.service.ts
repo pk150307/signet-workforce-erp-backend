@@ -60,23 +60,31 @@ export class EmployeeService {
   }
 
   async create(input: CreateEmployeeInput) {
-    if (await employeeRepository.emailExists(input.email)) {
-      throw new AppError(400, `An employee with email '${input.email}' already exists.`);
+    const email = input.email?.trim();
+    if (email && (await employeeRepository.emailExists(email))) {
+      throw new AppError(400, `An employee with email '${email}' already exists.`);
     }
     await this.validateClientSite(input.clientId, input.siteId);
     await this.validateEmployeeOrg(input);
-    return employeeRepository.create(input);
+    return employeeRepository.create({ ...input, email: email || undefined });
   }
 
   async saveDraft(input: SaveEmployeeDraftInput) {
-    if (input.email && (await employeeRepository.emailExists(input.email, input.id))) {
-      throw new AppError(400, `An employee with email '${input.email}' already exists.`);
+    const email = input.email?.trim();
+    if (email && (await employeeRepository.emailExists(email, input.id))) {
+      throw new AppError(400, `An employee with email '${email}' already exists.`);
     }
     await this.validateClientSite(input.clientId, input.siteId);
     await this.validateEmployeeOrg(input);
 
     try {
-      return await employeeRepository.saveDraft(input);
+      return await employeeRepository.saveDraft(
+        email
+          ? { ...input, email }
+          : input.email !== undefined
+            ? { ...input, email: '' }
+            : input,
+      );
     } catch (error) {
       if (error instanceof Error && error.message === 'NOT_FOUND') {
         throw new NotFoundError('Employee', input.id);
@@ -103,14 +111,15 @@ export class EmployeeService {
     const existing = await employeeRepository.findById(input.id);
     if (!existing) throw new NotFoundError('Employee', input.id);
 
-    if (input.email && (await employeeRepository.emailExists(input.email, input.id))) {
-      throw new AppError(400, `An employee with email '${input.email}' already exists.`);
+    const email = input.email?.trim();
+    if (email && (await employeeRepository.emailExists(email, input.id))) {
+      throw new AppError(400, `An employee with email '${email}' already exists.`);
     }
     await this.validateClientSite(input.clientId, input.siteId);
     await this.validateEmployeeOrg(input);
 
     try {
-      await employeeRepository.update(input);
+      await employeeRepository.update({ ...input, email: email || undefined });
     } catch (error) {
       if (error instanceof Error && error.message === 'NOT_FOUND') {
         throw new NotFoundError('Employee', input.id);
@@ -224,8 +233,8 @@ export class EmployeeService {
     return employeeRepository.bulkImport(rows, createdBy);
   }
 
-  exportEmployees() {
-    return employeeRepository.exportEmployees();
+  exportEmployees(format: 'excel' | 'pdf' = 'excel') {
+    return employeeRepository.exportEmployees(format);
   }
 }
 

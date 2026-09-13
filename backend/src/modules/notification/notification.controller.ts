@@ -3,14 +3,12 @@ import { sendNoContent, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { notificationService } from './notification.service';
 import { NotificationFilter } from './notification.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 function parseFilter(req: Request): NotificationFilter {
   const pagination = parseCursorPaginationQuery(req.query);
-  const { page, pageSize } = legacyOffsetFromCursor(pagination);
   return {
-    page,
-    pageSize,
+    ...pagination,
     userId: req.user!.userId,
     unreadOnly: req.query.unreadOnly === 'true' ? true : undefined,
     notificationType: req.query.notificationType as string | undefined,

@@ -2,14 +2,12 @@ import { Request, Response } from 'express';
 import { loginHistoryService } from './login-history.service';
 import { sendSuccess } from '../../common/response';
 import { LoginHistoryFilter } from './login-history.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 function parseFilter(req: Request, overrides: Partial<LoginHistoryFilter> = {}): LoginHistoryFilter {
   const pagination = parseCursorPaginationQuery(req.query);
-  const { page, pageSize } = legacyOffsetFromCursor(pagination);
   return {
-    page,
-    pageSize,
+    ...pagination,
     userId: (req.query.userId as string | undefined) ?? overrides.userId,
     loginStatus: req.query.loginStatus as string | undefined,
     dateFrom: req.query.dateFrom as string | undefined,

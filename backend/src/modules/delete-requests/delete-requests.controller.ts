@@ -3,15 +3,13 @@ import { deleteRequestsService } from './delete-requests.service';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
 import { DeleteRequestFilter } from './delete-requests.types';
-import { legacyOffsetFromCursor, parseCursorPaginationQuery } from '../../types';
+import { parseCursorPaginationQuery } from '../../types';
 
 export class DeleteRequestsController {
   async list(req: Request, res: Response): Promise<void> {
     const pagination = parseCursorPaginationQuery(req.query);
-    const { page, pageSize } = legacyOffsetFromCursor(pagination);
     const filter: DeleteRequestFilter = {
-      page,
-      pageSize,
+      ...pagination,
       status: req.query.status as string | undefined,
       module: req.query.module as string | undefined,
       entityType: req.query.entityType as string | undefined,

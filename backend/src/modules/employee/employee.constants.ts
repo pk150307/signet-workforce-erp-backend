@@ -78,8 +78,8 @@ export type EmployeeActivityType =
   | 'document_uploaded'
   | 'draft_saved';
 
-export const EMPLOYEE_CODE_PREFIX = 'SS-';
-export const EMPLOYEE_CODE_PAD_LENGTH = 5;
+export const EMPLOYEE_CODE_PREFIX = 'SIG-';
+export const EMPLOYEE_CODE_PAD_LENGTH = 6;
 
 export const BULK_IMPORT_HEADERS = [
   'firstName',
