@@ -1,8 +1,11 @@
 import ExcelJS from 'exceljs';
+import { applyReadablePrintLayout } from '../../utils/excel-export';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
 
 export const EMP_ID_HEADER = 'Emp ID';
 export const EMP_NAME_HEADER = 'Emp Name';
+export const SOFT_CODE_HEADER = 'Soft Code';
+export const FATHER_NAME_HEADER = 'Father Name';
 export const PRESENT_DAYS_HEADER = 'Present Days';
 export const OT_HOURS_HEADER = 'OT Hours';
 export const NIGHT_ALLOWANCE_HEADER = 'Night Allowance';
@@ -12,6 +15,8 @@ export const BONUS_HEADER = 'Bonus';
 const MONTHLY_EXPORT_HEADERS = [
   EMP_ID_HEADER,
   EMP_NAME_HEADER,
+  SOFT_CODE_HEADER,
+  FATHER_NAME_HEADER,
   PRESENT_DAYS_HEADER,
   OT_HOURS_HEADER,
   NIGHT_ALLOWANCE_HEADER,
@@ -169,6 +174,8 @@ export async function parseMonthlyWorkbook(buffer: Buffer): Promise<ParsedMonthl
 export interface MonthlyExportEmployee {
   employeeCode: string;
   employeeName: string;
+  softCode?: string | null;
+  fatherName?: string | null;
   presentDays: number | null;
   overtimeHours: number;
   nightAllowance: number;
@@ -195,12 +202,15 @@ export async function buildMonthlyWorkbook(
 
   sheet.getColumn(1).width = 14;
   sheet.getColumn(2).width = 22;
-  for (let i = 3; i <= 7; i++) {
+  sheet.getColumn(3).width = 14;
+  sheet.getColumn(4).width = 22;
+  for (let i = 5; i <= 9; i++) {
     sheet.getColumn(i).width = 16;
     sheet.getColumn(i).alignment = { horizontal: 'center' };
   }
 
-  sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: 2 }];
+  sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: 4 }];
+  applyReadablePrintLayout(sheet);
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
@@ -225,6 +235,8 @@ function monthlyExportRow(
   return [
     emp.employeeCode,
     emp.employeeName,
+    emp.softCode ?? '',
+    emp.fatherName ?? '',
     emp.presentDays != null ? emp.presentDays : '',
     emp.overtimeHours > 0 ? emp.overtimeHours : '',
     emp.nightAllowance > 0 ? emp.nightAllowance : '',

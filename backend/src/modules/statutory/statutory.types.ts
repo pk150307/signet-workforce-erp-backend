@@ -6,7 +6,9 @@ export interface PfEsicListItem {
   id: string;
   employeeId: string;
   employeeCode: string;
+  softCode: string | null;
   fullName: string;
+  fatherName: string | null;
   department: string;
   designation: string;
   clientCompanyName: string | null;
@@ -101,7 +103,9 @@ export interface StatutoryFilter {
 
 export const PF_ESIC_EXPORT_HEADERS = [
   'Employee Code',
+  'Soft Code',
   'Full Name',
+  'Father Name',
   'Client',
   'Designation',
   'Site',
@@ -112,3 +116,6 @@ export const PF_ESIC_EXPORT_HEADERS = [
   'Status',
   'Effective Date',
 ] as const;
+
+/** PDF drops Status / Effective Date so identity numbers stay on one line. */
+export const PF_ESIC_PDF_OMIT_HEADERS = ['Status', 'Effective Date'] as const;

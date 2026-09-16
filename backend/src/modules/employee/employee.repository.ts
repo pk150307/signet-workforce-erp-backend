@@ -25,6 +25,7 @@ import {
   BULK_EXPORT_HEADERS,
   EMPLOYEE_CODE_PAD_LENGTH,
   EMPLOYEE_CODE_PREFIX,
+  EMPLOYEE_PDF_OMIT_HEADERS,
   EmployeeLifecycleStatus,
 } from './employee.constants';
 import {
@@ -238,10 +239,14 @@ export class EmployeeRepository {
   }
 
   private async mapListRow(r: Record<string, unknown>): Promise<EmployeeListItem> {
+    const softCode = r.client_soft_code ? String(r.client_soft_code) : null;
     return {
       id: String(r.id),
       employeeCode: String(r.employee_code),
+      softCode,
+      clientSoftCode: softCode,
       fullName: `${r.first_name} ${r.last_name}`.trim(),
+      fatherName: r.father_name ? String(r.father_name) : null,
       email: r.email ? String(r.email) : '',
       phone: String(r.phone),
       department: String(r.department_name ?? ''),
@@ -410,8 +415,10 @@ export class EmployeeRepository {
       conditions.push(`(
         LOWER(COALESCE(pd.first_name, e.first_name)) LIKE $${paramIndex} OR
         LOWER(COALESCE(pd.last_name, e.last_name)) LIKE $${paramIndex} OR
+        LOWER(COALESCE(pd.father_name, '')) LIKE $${paramIndex} OR
         LOWER(e.email) LIKE $${paramIndex} OR
         LOWER(e.employee_code) LIKE $${paramIndex} OR
+        LOWER(COALESCE(ed.client_soft_code, e.client_soft_code, '')) LIKE $${paramIndex} OR
         e.phone LIKE $${paramIndex}
       )`);
       params.push(`%${filter.search.toLowerCase()}%`);
@@ -478,6 +485,8 @@ export class EmployeeRepository {
       `SELECT e.id, e.employee_code, e.email, e.phone, e.status, e.created_at,
               COALESCE(pd.first_name, e.first_name) AS first_name,
               COALESCE(pd.last_name, e.last_name) AS last_name,
+              pd.father_name,
+              COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
               COALESCE(pd.profile_photo_url, e.profile_photo_url) AS profile_photo_url,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
               d.name AS department_name, des.name AS designation_name, s.site_name
@@ -592,6 +601,8 @@ export class EmployeeRepository {
       `SELECT e.id, e.employee_code, e.email, e.phone, e.status,
               COALESCE(pd.first_name, e.first_name) AS first_name,
               COALESCE(pd.last_name, e.last_name) AS last_name,
+              pd.father_name,
+              COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
               COALESCE(pd.profile_photo_url, e.profile_photo_url) AS profile_photo_url,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
               d.name AS department_name, des.name AS designation_name, s.site_name
@@ -1731,8 +1742,10 @@ export class EmployeeRepository {
   async exportEmployees(format: 'excel' | 'pdf' = 'excel'): Promise<Buffer> {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.employee_code,
+              COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
               COALESCE(pd.first_name, e.first_name) AS first_name,
               COALESCE(pd.last_name, e.last_name) AS last_name,
+              pd.father_name,
               e.email, e.phone, e.status,
               d.name AS department, des.name AS designation, s.site_name AS site,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
@@ -1750,8 +1763,10 @@ export class EmployeeRepository {
 
     const dataRows: Array<Array<string | number | null | undefined>> = rows.map((r) => [
       String(r.employee_code ?? ''),
+      r.client_soft_code == null ? '' : String(r.client_soft_code),
       String(r.first_name ?? ''),
       String(r.last_name ?? ''),
+      r.father_name == null ? '' : String(r.father_name),
       String(r.email ?? ''),
       String(r.phone ?? ''),
       r.status == null ? '' : Number(r.status),
@@ -1769,6 +1784,7 @@ export class EmployeeRepository {
         headers: [...BULK_EXPORT_HEADERS],
         rows: dataRows,
         landscape: true,
+        omitHeaders: [...EMPLOYEE_PDF_OMIT_HEADERS],
       });
     }
 

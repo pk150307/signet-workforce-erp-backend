@@ -24,6 +24,7 @@ import {
   EMPLOYEE_PAY_GRADE_JOINS,
   EMPLOYEE_PAY_GRADE_SELECT,
 } from '../designation-grade/designation-grade.resolver';
+import { executeBatchInsert } from '../../utils/batch-insert';
 
 export class PayslipRepository {
   async generateForPeriod(input: GeneratePayslipsInput): Promise<number> {
@@ -74,25 +75,42 @@ export class PayslipRepository {
       throw new NotFoundError('Payroll entries for period');
     }
 
-    let generated = 0;
-    for (const entry of entries) {
+    const slipRows = entries.map((entry) => {
       const breakdown = buildPayslipBreakdownFromPayrollRow(entry);
-
       const attendanceSummary = resolvePayslipAttendanceSummary({
         ...entry,
         month: entry.month,
         year: entry.year,
       });
-
       const slipNumber = `PS-${input.year}${String(input.month).padStart(2, '0')}-${entry.employee_code}`;
+      return [
+        slipNumber,
+        entry.id,
+        entry.payroll_run_id,
+        entry.employee_id,
+        input.month,
+        input.year,
+        breakdown.grossEarnings,
+        breakdown.totalDeductions,
+        breakdown.netSalary,
+        JSON.stringify(breakdown.earnings),
+        JSON.stringify(breakdown.deductions),
+        JSON.stringify(attendanceSummary),
+        input.createdBy,
+      ];
+    });
 
-      await query(
-        `INSERT INTO salary_slips (
-          slip_number, payroll_entry_id, payroll_run_id, employee_id, month, year,
-          gross_earnings, total_deductions, net_salary, earnings, deductions,
-          attendance_summary, created_by
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-        ON CONFLICT (employee_id, month, year) DO UPDATE SET
+    await executeBatchInsert(
+      query,
+      `INSERT INTO salary_slips (
+        slip_number, payroll_entry_id, payroll_run_id, employee_id, month, year,
+        gross_earnings, total_deductions, net_salary, earnings, deductions,
+        attendance_summary, created_by
+      ) VALUES`,
+      slipRows,
+      {
+        casts: { 10: '::jsonb', 11: '::jsonb', 12: '::jsonb' },
+        suffix: `ON CONFLICT (employee_id, month, year) DO UPDATE SET
           slip_number = EXCLUDED.slip_number, payroll_entry_id = EXCLUDED.payroll_entry_id,
           payroll_run_id = EXCLUDED.payroll_run_id, gross_earnings = EXCLUDED.gross_earnings,
           total_deductions = EXCLUDED.total_deductions, net_salary = EXCLUDED.net_salary,
@@ -100,26 +118,10 @@ export class PayslipRepository {
           attendance_summary = EXCLUDED.attendance_summary, generated_at = NOW(),
           status = 'generated', is_deleted = FALSE, deleted_at = NULL, deleted_by = NULL,
           updated_at = NOW(), updated_by = EXCLUDED.created_by`,
-        [
-          slipNumber,
-          entry.id,
-          entry.payroll_run_id,
-          entry.employee_id,
-          input.month,
-          input.year,
-          breakdown.grossEarnings,
-          breakdown.totalDeductions,
-          breakdown.netSalary,
-          JSON.stringify(breakdown.earnings),
-          JSON.stringify(breakdown.deductions),
-          JSON.stringify(attendanceSummary),
-          input.createdBy,
-        ],
-      );
-      generated++;
-    }
+      },
+    );
 
-    return generated;
+    return slipRows.length;
   }
 
   async findAll(filter: PayslipFilter): Promise<CursorPaginatedResult<PayslipListItem>> {
@@ -152,7 +154,9 @@ export class PayslipRepository {
       conditions.push(`(
         LOWER(e.first_name) LIKE $${i} OR
         LOWER(e.last_name) LIKE $${i} OR
-        LOWER(e.employee_code) LIKE $${i}
+        LOWER(e.employee_code) LIKE $${i} OR
+        LOWER(COALESCE(pd.father_name, '')) LIKE $${i} OR
+        LOWER(COALESCE(ed.client_soft_code, e.client_soft_code, '')) LIKE $${i}
       )`);
       params.push(`%${filter.search.toLowerCase()}%`);
       i++;
@@ -167,11 +171,18 @@ export class PayslipRepository {
       pagination,
       conditions,
       params,
-      selectSql: `SELECT ss.*, e.employee_code, e.first_name, e.last_name, d.name AS department_name, des.name AS designation_name
+      selectSql: `SELECT ss.id, ss.slip_number, ss.employee_id, ss.month, ss.year,
+              ss.gross_earnings, ss.total_deductions, ss.net_salary, ss.status,
+              ss.generated_at, ss.file_path,
+              e.employee_code, e.first_name, e.last_name,
+              pd.father_name,
+              COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
+              d.name AS department_name, des.name AS designation_name
        FROM salary_slips ss
        INNER JOIN employees e ON e.id = ss.employee_id
        INNER JOIN departments d ON d.id = e.department_id
        INNER JOIN designations des ON des.id = e.designation_id
+       LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)`,
       sortFields: [
@@ -188,6 +199,7 @@ export class PayslipRepository {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT ss.*, e.employee_code, e.first_name, e.last_name, e.joining_date,
               e.bank_name, e.account_number, e.ifsc_code, e.pan_number,
+              pd.father_name,
               COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
               COALESCE(esd.uan_number, e.uan_number) AS uan_number,
               COALESCE(esd.pf_number, e.pf_number) AS pf_number,
@@ -226,6 +238,7 @@ export class PayslipRepository {
        LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
        LEFT JOIN payroll_entries pe ON pe.id = ss.payroll_entry_id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
+       LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
        ${EMPLOYEE_PAY_GRADE_JOINS}
        ${attendanceRegisterExtrasJoin('ss.employee_id', 'ss.month', 'ss.year')}
        WHERE ss.id = $1 AND NOT ss.is_deleted`,
@@ -300,7 +313,9 @@ export class PayslipRepository {
       slipNumber: String(r.slip_number),
       employeeId: String(r.employee_id),
       employeeCode: String(r.employee_code),
+      softCode: r.client_soft_code ? String(r.client_soft_code) : null,
       employeeName: `${r.first_name} ${r.last_name}`,
+      fatherName: r.father_name ? String(r.father_name) : null,
       department: String(r.department_name),
       designation: String(r.designation_name),
       month,
@@ -339,6 +354,7 @@ export class PayslipRepository {
         code: String(r.employee_code),
         name: `${r.first_name} ${r.last_name}`,
         softCode: r.client_soft_code ? String(r.client_soft_code) : null,
+        fatherName: r.father_name ? String(r.father_name) : null,
         department: String(r.department_name),
         designation: String(r.designation_name),
         siteName: r.site_name ? String(r.site_name) : null,

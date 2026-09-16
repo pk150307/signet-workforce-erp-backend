@@ -62,3 +62,5 @@ export const AUDIT_LOG_EXPORT_HEADERS = [
   'Operating System',
   'Created By',
 ] as const;
+
+export const AUDIT_LOG_PDF_OMIT_HEADERS = ['Browser', 'Operating System'] as const;

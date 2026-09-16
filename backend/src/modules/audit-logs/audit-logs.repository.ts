@@ -8,6 +8,7 @@ import {
 import {
   AUDIT_LOG_EXPORT_HEADERS,
   AUDIT_LOG_EXPORT_MAX_ROWS,
+  AUDIT_LOG_PDF_OMIT_HEADERS,
   AuditLogDetail,
   AuditLogFilter,
   AuditLogListItem,
@@ -254,6 +255,7 @@ export class AuditLogsRepository {
         headers: [...AUDIT_LOG_EXPORT_HEADERS],
         rows: dataRows,
         landscape: true,
+        omitHeaders: [...AUDIT_LOG_PDF_OMIT_HEADERS],
       });
     }
 

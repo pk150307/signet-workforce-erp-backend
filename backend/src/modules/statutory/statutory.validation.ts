@@ -21,7 +21,9 @@ const pfEsicQueryFields = [
   query('hasEsic').optional().isBoolean().toBoolean(),
   query('sortBy').optional().isIn([
     'employeeCode',
+    'softCode',
     'fullName',
+    'fatherName',
     'department',
     'clientCompanyName',
     'aadhaarNumber',
@@ -54,7 +56,9 @@ export const exportPfEsicValidation = [
   query('hasEsic').optional().isBoolean().toBoolean(),
   query('sortBy').optional().isIn([
     'employeeCode',
+    'softCode',
     'fullName',
+    'fatherName',
     'department',
     'clientCompanyName',
     'aadhaarNumber',

@@ -19,12 +19,14 @@ import {
   EmployeeAdvanceStatus,
 } from './employee-advances.types';
 import { PoolClient } from 'pg';
+import { executeBatchInsert } from '../../utils/batch-insert';
 
 export interface SourceEmployeeForAdvance {
   employeeId: string;
   employeeCode: string;
   firstName: string;
   lastName: string;
+  fatherName: string | null;
   softCode: string | null;
   designation: string | null;
   salaryNetPay: number | null;
@@ -46,6 +48,7 @@ export interface InsertAdvanceEntry {
   softCode: string | null;
   employeeCode: string;
   employeeName: string;
+  fatherName: string | null;
   designation: string | null;
   advanceAmount: number;
   notes: string | null;
@@ -57,6 +60,7 @@ const EXPORT_HEADERS = [
   'Soft Code',
   'Employee Code',
   'Employee Name',
+  'Father Name',
   'Designation',
   'Payment Date',
   'Payment Amount',
@@ -65,6 +69,8 @@ const EXPORT_HEADERS = [
   'Salary Net Pay',
   'Payable (Net − Advance)',
 ] as const;
+
+const ADVANCE_PDF_OMIT_HEADERS = ['Payment Notes'] as const;
 
 export function computePayable(
   salaryNetPay: number | null,
@@ -166,11 +172,13 @@ export class EmployeeAdvancesRepository {
       `SELECT * FROM (
          SELECT DISTINCT ON (e.id)
                 e.id AS employee_id, e.employee_code, e.first_name, e.last_name,
+                epd.father_name,
                 COALESCE(e.client_soft_code, eed.client_soft_code) AS soft_code,
                 des.name AS designation,
                 sre.net_pay AS salary_net_pay
          FROM employees e
          INNER JOIN sites s ON s.id = e.site_id AND NOT s.is_deleted
+         LEFT JOIN employee_personal_details epd ON epd.employee_id = e.id
          LEFT JOIN LATERAL (
            SELECT client_soft_code
            FROM employee_employment_details
@@ -196,6 +204,7 @@ export class EmployeeAdvancesRepository {
       employeeCode: String(r.employee_code),
       firstName: String(r.first_name),
       lastName: String(r.last_name),
+      fatherName: r.father_name ? String(r.father_name) : null,
       softCode: r.soft_code ? String(r.soft_code) : null,
       designation: r.designation ? String(r.designation) : null,
       salaryNetPay: r.salary_net_pay == null ? null : toNumber(r.salary_net_pay as string),
@@ -231,8 +240,8 @@ export class EmployeeAdvancesRepository {
     const { rows } = await q<{ id: string }>(
       `INSERT INTO employee_advance_entries (
           advance_register_id, employee_id, soft_code, employee_code, employee_name,
-          designation, advance_amount, notes, salary_net_pay, payable_amount
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          father_name, designation, advance_amount, notes, salary_net_pay, payable_amount
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         RETURNING id`,
       [
         row.advanceRegisterId,
@@ -240,6 +249,7 @@ export class EmployeeAdvancesRepository {
         row.softCode,
         row.employeeCode,
         row.employeeName,
+        row.fatherName,
         row.designation,
         row.advanceAmount,
         row.notes,
@@ -251,9 +261,27 @@ export class EmployeeAdvancesRepository {
   }
 
   async insertEntries(rows: InsertAdvanceEntry[], client?: PoolClient): Promise<void> {
-    for (const row of rows) {
-      await this.insertEntry(row, client);
-    }
+    if (!rows.length) return;
+    await executeBatchInsert(
+      this.runner(client),
+      `INSERT INTO employee_advance_entries (
+          advance_register_id, employee_id, soft_code, employee_code, employee_name,
+          father_name, designation, advance_amount, notes, salary_net_pay, payable_amount
+        ) VALUES`,
+      rows.map((row) => [
+        row.advanceRegisterId,
+        row.employeeId,
+        row.softCode,
+        row.employeeCode,
+        row.employeeName,
+        row.fatherName,
+        row.designation,
+        row.advanceAmount,
+        row.notes,
+        row.salaryNetPay,
+        row.payableAmount,
+      ]),
+    );
   }
 
   async updateEntryIdentity(
@@ -262,6 +290,7 @@ export class EmployeeAdvancesRepository {
       softCode: string | null;
       employeeCode: string;
       employeeName: string;
+      fatherName: string | null;
       designation: string | null;
       salaryNetPay: number | null;
       payableAmount: number | null;
@@ -274,9 +303,10 @@ export class EmployeeAdvancesRepository {
          soft_code = $2,
          employee_code = $3,
          employee_name = $4,
-         designation = $5,
-         salary_net_pay = $6,
-         payable_amount = $7,
+         father_name = $5,
+         designation = $6,
+         salary_net_pay = $7,
+         payable_amount = $8,
          updated_at = NOW()
        WHERE id = $1`,
       [
@@ -284,6 +314,7 @@ export class EmployeeAdvancesRepository {
         data.softCode,
         data.employeeCode,
         data.employeeName,
+        data.fatherName,
         data.designation,
         data.salaryNetPay,
         data.payableAmount,
@@ -462,8 +493,10 @@ export class EmployeeAdvancesRepository {
 
     const { rows: entryRows } = await query<Record<string, unknown>>(
       `SELECT e.*,
+              COALESCE(NULLIF(TRIM(e.father_name), ''), epd.father_name) AS father_name,
               COALESCE(pc.payment_count, 0)::int AS payment_count
        FROM employee_advance_entries e
+       LEFT JOIN employee_personal_details epd ON epd.employee_id = e.employee_id
        LEFT JOIN (
          SELECT entry_id, COUNT(*)::int AS payment_count
          FROM employee_advance_payments
@@ -506,8 +539,10 @@ export class EmployeeAdvancesRepository {
   async getEntry(registerId: string, entryId: string): Promise<EmployeeAdvanceEntry | null> {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.*,
+              COALESCE(NULLIF(TRIM(e.father_name), ''), epd.father_name) AS father_name,
               COALESCE((SELECT COUNT(*) FROM employee_advance_payments p WHERE p.entry_id = e.id), 0)::int AS payment_count
        FROM employee_advance_entries e
+       LEFT JOIN employee_personal_details epd ON epd.employee_id = e.employee_id
        WHERE e.id = $1::uuid AND e.advance_register_id = $2::uuid`,
       [entryId, registerId],
     );
@@ -684,6 +719,7 @@ export class EmployeeAdvancesRepository {
       headers: [...EXPORT_HEADERS],
       rows: this.buildExportDataRows(detail),
       landscape: true,
+      omitHeaders: [...ADVANCE_PDF_OMIT_HEADERS],
     });
   }
 
@@ -724,6 +760,7 @@ export class EmployeeAdvancesRepository {
           e.softCode ?? '',
           e.employeeCode,
           e.employeeName,
+          e.fatherName ?? '',
           e.designation ?? '',
           '',
           '',
@@ -739,6 +776,7 @@ export class EmployeeAdvancesRepository {
           e.softCode ?? '',
           e.employeeCode,
           e.employeeName,
+          e.fatherName ?? '',
           e.designation ?? '',
           p.paidOn,
           p.amount,
@@ -797,6 +835,7 @@ export class EmployeeAdvancesRepository {
       softCode: r.soft_code ? String(r.soft_code) : null,
       employeeCode: String(r.employee_code),
       employeeName: String(r.employee_name),
+      fatherName: r.father_name ? String(r.father_name) : null,
       designation: r.designation ? String(r.designation) : null,
       advanceAmount: toNumber(r.advance_amount as string),
       paymentCount: Number(r.payment_count ?? payments.length),

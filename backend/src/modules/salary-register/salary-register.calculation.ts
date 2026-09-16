@@ -12,7 +12,6 @@ import {
   computeEmployeeEsi,
   computeEmployeeLwf,
   computeEmployeePf,
-  computeEsiGrossEarned,
   computeStatutoryGrossEarned,
   resolveStatutoryConfig,
 } from '../statutory/statutory.calculation';
@@ -201,14 +200,11 @@ export function toStatutoryContributionConfig(
 }
 
 /**
- * ESIC wage base = basic + HRA + night + OT (excludes punctuality) — same as payslip.
+ * ESIC wage base = Gross Total (Gross Earn + ATT/AW AFD), not Gross Earn.
  * Eligibility uses contractual monthly gross (basic + HRA).
  */
 export function calculateEsic(
-  earningBasic: number,
-  earningHra: number,
-  nAll: number,
-  otAmount: number,
+  grossTotal: number,
   monthlyGross: number,
   esiEligible: boolean,
   config: SalaryStatutoryConfig,
@@ -219,8 +215,7 @@ export function calculateEsic(
     esiEligible: true,
     lwfEligible: true,
   });
-  const esiGross = computeEsiGrossEarned(earningBasic, earningHra, nAll, otAmount);
-  return computeEmployeeEsi(esiGross, monthlyGross, statutory);
+  return computeEmployeeEsi(grossTotal, monthlyGross, statutory);
 }
 
 /** EPF = min(rate% of earning basic, max contribution) — same as payslip. */
@@ -294,15 +289,7 @@ export function calculateSalaryRow(input: SalaryCalcInput): SalaryCalcResult {
   const grossEarnings = calculateGrossEarnings(earningBasic, earningHra, otAmount, nAll);
   const grossTotal = calculateGrossTotal(grossEarnings, attAwAfd);
 
-  const esic = calculateEsic(
-    earningBasic,
-    earningHra,
-    nAll,
-    otAmount,
-    fixedTotal,
-    input.esiEligible,
-    config,
-  );
+  const esic = calculateEsic(grossTotal, fixedTotal, input.esiEligible, config);
   const epf = calculateEpf(earningBasic, input.pfEligible, config);
   const lwf = calculateLwf(
     earningBasic,

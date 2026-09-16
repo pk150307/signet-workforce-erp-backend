@@ -37,6 +37,7 @@ export interface EmployeeAdvanceEntry {
   softCode: string | null;
   employeeCode: string;
   employeeName: string;
+  fatherName: string | null;
   designation: string | null;
   /** Sum of dated payments for this employee in the period. */
   advanceAmount: number;

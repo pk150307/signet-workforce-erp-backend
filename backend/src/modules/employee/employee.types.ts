@@ -10,7 +10,11 @@ import {
 export interface EmployeeListItem {
   id: string;
   employeeCode: string;
+  softCode: string | null;
+  /** Same value as softCode — kept for Employee Master clients. */
+  clientSoftCode: string | null;
   fullName: string;
+  fatherName: string | null;
   email: string;
   phone: string;
   department: string;

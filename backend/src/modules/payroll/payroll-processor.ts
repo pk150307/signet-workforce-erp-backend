@@ -20,6 +20,7 @@ import {
   resolveStatutoryConfig,
 } from '../statutory/statutory.calculation';
 import { resolvePayrollRunId } from '../../utils/payroll-run';
+import { executeBatchInsert } from '../../utils/batch-insert';
 
 export interface ProcessPayrollOptions {
   month: number;
@@ -83,9 +84,83 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
   const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
   const monthEndDate = new Date(year, month, 0);
   const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(monthEndDate.getDate()).padStart(2, '0')}`;
+  const employeeIds = employees.map((employee) => String(employee.id));
+
+  const [leaveResult, registerExtrasResult] = await Promise.all([
+    query<{ employee_id: string; sum: string | null }>(
+      `SELECT employee_id, COALESCE(SUM(number_of_days), 0) AS sum
+       FROM leave_requests
+       WHERE employee_id = ANY($1::uuid[]) AND status = $2
+         AND from_date >= $3 AND to_date <= $4 AND NOT is_deleted
+       GROUP BY employee_id`,
+      [employeeIds, LeaveStatus.Approved, monthStart, monthEnd],
+    ),
+    query<{
+      employee_id: string;
+      present_days: string | null;
+      overtime_amount: string;
+      night_allowance: string;
+      punctuality_award: string;
+      bonus: string;
+    }>(
+      `SELECT aro.employee_id,
+              SUM(aro.present_days) AS present_days,
+              COALESCE(SUM(aro.overtime_hours), 0) AS overtime_amount,
+              COALESCE(SUM(aro.night_allowance), 0) AS night_allowance,
+              COALESCE(SUM(aro.punctuality_award), 0) AS punctuality_award,
+              COALESCE(SUM(aro.bonus), 0) AS bonus
+       FROM attendance_register_employee_overtime aro
+       INNER JOIN attendance_registers ar ON ar.id = aro.register_id
+       WHERE aro.employee_id = ANY($1::uuid[]) AND ar.month = $2 AND ar.year = $3
+       GROUP BY aro.employee_id`,
+      [employeeIds, month, year],
+    ),
+  ]);
+
+  const leaveByEmployee = new Map(
+    leaveResult.rows.map((row) => [String(row.employee_id), parseFloat(row.sum ?? '0')]),
+  );
+  const extrasByEmployee = new Map(
+    registerExtrasResult.rows.map((row) => [String(row.employee_id), row]),
+  );
+
+  const missingPresentIds = employeeIds.filter((id) => {
+    const presentDays = parseFloat(extrasByEmployee.get(id)?.present_days ?? '');
+    return !Number.isFinite(presentDays);
+  });
+
+  const presentFallbackByEmployee = new Map<string, number>();
+  if (missingPresentIds.length > 0) {
+    const presentResult = await query<{ employee_id: string; count: string }>(
+      `SELECT employee_id, COALESCE(SUM(
+         CASE
+           WHEN status IN ($4, $5, $6) THEN 1
+           WHEN status = $7 THEN 0.5
+           ELSE 0
+         END
+       ), 0) AS count
+       FROM attendances
+       WHERE employee_id = ANY($1::uuid[]) AND attendance_date BETWEEN $2 AND $3
+         AND NOT is_deleted
+       GROUP BY employee_id`,
+      [
+        missingPresentIds,
+        monthStart,
+        monthEnd,
+        AttendanceStatus.Present,
+        AttendanceStatus.Late,
+        AttendanceStatus.EarlyOut,
+        AttendanceStatus.HalfDay,
+      ],
+    );
+    for (const row of presentResult.rows) {
+      presentFallbackByEmployee.set(String(row.employee_id), parseFloat(row.count));
+    }
+  }
 
   let totalGross = 0;
   let totalDeductions = 0;
+  const payrollRows: unknown[][] = [];
 
   for (const employee of employees) {
     const employeeId = String(employee.id);
@@ -93,65 +168,19 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
     const gradeComp = payGrade.gradeComp;
     const basicSalary = gradeComp?.basicSalary ?? toNumber(employee.employment_basic_salary as string);
     const grossSalary = payGrade.monthlyGross;
+    const extras = extrasByEmployee.get(employeeId);
+    const leaveDays = leaveByEmployee.get(employeeId) ?? 0;
 
-    const leaveResult = await query<{ sum: string | null }>(
-      `SELECT COALESCE(SUM(number_of_days), 0) AS sum FROM leave_requests
-       WHERE employee_id = $1 AND status = $2
-       AND from_date >= $3 AND to_date <= $4 AND NOT is_deleted`,
-      [employeeId, LeaveStatus.Approved, monthStart, monthEnd],
-    );
-    const leaveDays = parseFloat(leaveResult.rows[0].sum ?? '0');
-
-    const registerExtrasResult = await query<{
-      present_days: string | null;
-      overtime_amount: string;
-      night_allowance: string;
-      punctuality_award: string;
-      bonus: string;
-    }>(
-      `SELECT SUM(aro.present_days) AS present_days,
-              COALESCE(SUM(aro.overtime_hours), 0) AS overtime_amount,
-              COALESCE(SUM(aro.night_allowance), 0) AS night_allowance,
-              COALESCE(SUM(aro.punctuality_award), 0) AS punctuality_award,
-              COALESCE(SUM(aro.bonus), 0) AS bonus
-       FROM attendance_register_employee_overtime aro
-       INNER JOIN attendance_registers ar ON ar.id = aro.register_id
-       WHERE aro.employee_id = $1 AND ar.month = $2 AND ar.year = $3`,
-      [employeeId, month, year],
-    );
-
-    let presentDays = parseFloat(registerExtrasResult.rows[0]?.present_days ?? '');
+    let presentDays = parseFloat(extras?.present_days ?? '');
     if (!Number.isFinite(presentDays)) {
-      // Legacy fallback for periods that still only have day-level marks
-      const presentResult = await query<{ count: string }>(
-        `SELECT COALESCE(SUM(
-           CASE
-             WHEN status IN ($4, $5, $6) THEN 1
-             WHEN status = $7 THEN 0.5
-             ELSE 0
-           END
-         ), 0) AS count
-         FROM attendances
-         WHERE employee_id = $1 AND attendance_date BETWEEN $2 AND $3
-           AND NOT is_deleted`,
-        [
-          employeeId,
-          monthStart,
-          monthEnd,
-          AttendanceStatus.Present,
-          AttendanceStatus.Late,
-          AttendanceStatus.EarlyOut,
-          AttendanceStatus.HalfDay,
-        ],
-      );
-      presentDays = parseFloat(presentResult.rows[0].count);
+      presentDays = presentFallbackByEmployee.get(employeeId) ?? 0;
     }
 
     const absentDays = Math.max(0, calendarDays - presentDays - leaveDays);
-    const overtimePay = roundOff(parseFloat(registerExtrasResult.rows[0]?.overtime_amount ?? '0'));
-    const nightAllowance = roundOff(parseFloat(registerExtrasResult.rows[0]?.night_allowance ?? '0'));
-    const punctualityAward = roundOff(parseFloat(registerExtrasResult.rows[0]?.punctuality_award ?? '0'));
-    const bonus = roundOff(parseFloat(registerExtrasResult.rows[0]?.bonus ?? '0'));
+    const overtimePay = roundOff(parseFloat(extras?.overtime_amount ?? '0'));
+    const nightAllowance = roundOff(parseFloat(extras?.night_allowance ?? '0'));
+    const punctualityAward = roundOff(parseFloat(extras?.punctuality_award ?? '0'));
+    const bonus = roundOff(parseFloat(extras?.bonus ?? '0'));
 
     let basicEarned: number;
     let hraEarned: number;
@@ -199,6 +228,7 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
       hraEarned,
       nightAllowance,
       overtimePay,
+      punctualityAward,
     );
 
     const lwfGross = computeStatutoryGrossEarned(
@@ -219,14 +249,43 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
     totalGross += gross;
     totalDeductions += deductions;
 
-    await query(
-      `INSERT INTO payroll_entries (
-        employee_id, payroll_run_id, month, year, working_days, present_days,
-        leave_days, absent_days, basic_salary, house_rent_allowance, special_allowance,
-        night_allowance, punctuality_award, bonus,
-        overtime_hours, overtime_pay, provident_fund, esi, lwf, professional_tax, status, created_by
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-      ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
+    payrollRows.push([
+      employeeId,
+      payrollRunId,
+      month,
+      year,
+      calendarDays,
+      presentDays,
+      leaveDays,
+      absentDays,
+      roundOff(basicEarned),
+      roundOff(hraEarned),
+      roundOff(specialAllowance),
+      nightAllowance,
+      punctualityAward,
+      bonus,
+      0,
+      overtimePay,
+      pf,
+      esi,
+      lwf,
+      0,
+      PayrollStatus.Processed,
+      createdBy,
+    ]);
+  }
+
+  await executeBatchInsert(
+    query,
+    `INSERT INTO payroll_entries (
+      employee_id, payroll_run_id, month, year, working_days, present_days,
+      leave_days, absent_days, basic_salary, house_rent_allowance, special_allowance,
+      night_allowance, punctuality_award, bonus,
+      overtime_hours, overtime_pay, provident_fund, esi, lwf, professional_tax, status, created_by
+    ) VALUES`,
+    payrollRows,
+    {
+      suffix: `ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
         working_days = EXCLUDED.working_days, present_days = EXCLUDED.present_days,
         leave_days = EXCLUDED.leave_days, absent_days = EXCLUDED.absent_days,
         basic_salary = EXCLUDED.basic_salary, house_rent_allowance = EXCLUDED.house_rent_allowance,
@@ -238,32 +297,8 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
         provident_fund = EXCLUDED.provident_fund,
         esi = EXCLUDED.esi, lwf = EXCLUDED.lwf, professional_tax = EXCLUDED.professional_tax,
         status = EXCLUDED.status, updated_at = NOW(), updated_by = EXCLUDED.created_by`,
-      [
-        employeeId,
-        payrollRunId,
-        month,
-        year,
-        calendarDays,
-        presentDays,
-        leaveDays,
-        absentDays,
-        roundOff(basicEarned),
-        roundOff(hraEarned),
-        roundOff(specialAllowance),
-        nightAllowance,
-        punctualityAward,
-        bonus,
-        0,
-        overtimePay,
-        pf,
-        esi,
-        lwf,
-        0,
-        PayrollStatus.Processed,
-        createdBy,
-      ],
-    );
-  }
+    },
+  );
 
   await query(
     `UPDATE payroll_runs SET status = $2, processed_date = NOW(), total_employees = $3,

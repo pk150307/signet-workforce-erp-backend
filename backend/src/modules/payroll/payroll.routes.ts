@@ -7,6 +7,7 @@ import { EmployeeStatus, AttendanceStatus, LeaveStatus, PayrollStatus } from '..
 import { countWorkingDays, monthName, round2, toNumber } from '../../utils/formatters';
 import { AppError } from '../../common/errors';
 import { resolvePayrollRunId } from '../../utils/payroll-run';
+import { executeBatchInsert } from '../../utils/batch-insert';
 import payslipRoutes from './payslip.routes';
 
 const router = Router();
@@ -77,39 +78,54 @@ router.post(
       const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
       const monthEndDate = new Date(year, month, 0);
       const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(monthEndDate.getDate()).padStart(2, '0')}`;
+      const employeeIds = employees.map((employee) => employee.id);
+
+      const [presentResult, leaveResult, otResult] = await Promise.all([
+        dbQuery<{ employee_id: string; count: string }>(
+          `SELECT employee_id, COUNT(*) AS count FROM attendances
+           WHERE employee_id = ANY($1::uuid[]) AND attendance_date BETWEEN $2 AND $3
+             AND status IN ($4, $5) AND NOT is_deleted
+           GROUP BY employee_id`,
+          [employeeIds, monthStart, monthEnd, AttendanceStatus.Present, AttendanceStatus.HalfDay],
+        ),
+        dbQuery<{ employee_id: string; sum: string | null }>(
+          `SELECT employee_id, COALESCE(SUM(number_of_days), 0) AS sum FROM leave_requests
+           WHERE employee_id = ANY($1::uuid[]) AND status = $2
+             AND from_date >= $3 AND to_date <= $4 AND NOT is_deleted
+           GROUP BY employee_id`,
+          [employeeIds, LeaveStatus.Approved, monthStart, monthEnd],
+        ),
+        dbQuery<{ employee_id: string; hours: string }>(
+          `SELECT aro.employee_id, COALESCE(SUM(aro.overtime_hours), 0) AS hours
+           FROM attendance_register_employee_overtime aro
+           INNER JOIN attendance_registers ar ON ar.id = aro.register_id
+           WHERE aro.employee_id = ANY($1::uuid[]) AND ar.month = $2 AND ar.year = $3
+           GROUP BY aro.employee_id`,
+          [employeeIds, month, year],
+        ),
+      ]);
+
+      const presentByEmployee = new Map(
+        presentResult.rows.map((row) => [String(row.employee_id), parseInt(row.count, 10)]),
+      );
+      const leaveByEmployee = new Map(
+        leaveResult.rows.map((row) => [String(row.employee_id), parseFloat(row.sum ?? '0')]),
+      );
+      const otByEmployee = new Map(
+        otResult.rows.map((row) => [String(row.employee_id), parseFloat(row.hours ?? '0')]),
+      );
 
       let totalGross = 0;
       let totalDeductions = 0;
+      const payrollRows: unknown[][] = [];
 
       for (const employee of employees) {
         const basicSalary = toNumber(employee.basic_salary);
         const grossSalary = toNumber(employee.gross_salary);
-
-        const presentResult = await dbQuery<{ count: string }>(
-          `SELECT COUNT(*) AS count FROM attendances
-           WHERE employee_id = $1 AND attendance_date BETWEEN $2 AND $3
-           AND status IN ($4, $5) AND NOT is_deleted`,
-          [employee.id, monthStart, monthEnd, AttendanceStatus.Present, AttendanceStatus.HalfDay],
-        );
-        const presentDays = parseInt(presentResult.rows[0].count, 10);
-
-        const leaveResult = await dbQuery<{ sum: string | null }>(
-          `SELECT COALESCE(SUM(number_of_days), 0) AS sum FROM leave_requests
-           WHERE employee_id = $1 AND status = $2
-           AND from_date >= $3 AND to_date <= $4 AND NOT is_deleted`,
-          [employee.id, LeaveStatus.Approved, monthStart, monthEnd],
-        );
-        const leaveDays = parseFloat(leaveResult.rows[0].sum ?? '0');
+        const presentDays = presentByEmployee.get(employee.id) ?? 0;
+        const leaveDays = leaveByEmployee.get(employee.id) ?? 0;
         const absentDays = Math.max(0, workingDays - presentDays - leaveDays);
-
-        const otResult = await dbQuery<{ hours: string }>(
-          `SELECT COALESCE(SUM(aro.overtime_hours), 0) AS hours
-           FROM attendance_register_employee_overtime aro
-           INNER JOIN attendance_registers ar ON ar.id = aro.register_id
-           WHERE aro.employee_id = $1 AND ar.month = $2 AND ar.year = $3`,
-          [employee.id, month, year],
-        );
-        const overtimeHours = parseFloat(otResult.rows[0]?.hours ?? '0');
+        const overtimeHours = otByEmployee.get(employee.id) ?? 0;
 
         const perDaySalary = basicSalary / workingDays;
         const hourlyRate = perDaySalary / 8;
@@ -126,13 +142,38 @@ router.post(
         totalGross += gross;
         totalDeductions += deductions;
 
-        await dbQuery(
-          `INSERT INTO payroll_entries (
-            employee_id, payroll_run_id, month, year, working_days, present_days,
-            leave_days, absent_days, basic_salary, house_rent_allowance, special_allowance,
-            overtime_hours, overtime_pay, provident_fund, esi, professional_tax, status, created_by
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-          ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
+        payrollRows.push([
+          employee.id,
+          payrollRunId,
+          month,
+          year,
+          workingDays,
+          presentDays,
+          leaveDays,
+          absentDays,
+          round2(basicEarned),
+          round2(hraEarned),
+          round2(specialAllowance),
+          round2(overtimeHours),
+          overtimePay,
+          round2(pf),
+          round2(esi),
+          pt,
+          PayrollStatus.Processed,
+          req.user?.username ?? 'System',
+        ]);
+      }
+
+      await executeBatchInsert(
+        dbQuery,
+        `INSERT INTO payroll_entries (
+          employee_id, payroll_run_id, month, year, working_days, present_days,
+          leave_days, absent_days, basic_salary, house_rent_allowance, special_allowance,
+          overtime_hours, overtime_pay, provident_fund, esi, professional_tax, status, created_by
+        ) VALUES`,
+        payrollRows,
+        {
+          suffix: `ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
             working_days = EXCLUDED.working_days, present_days = EXCLUDED.present_days,
             leave_days = EXCLUDED.leave_days, absent_days = EXCLUDED.absent_days,
             basic_salary = EXCLUDED.basic_salary, house_rent_allowance = EXCLUDED.house_rent_allowance,
@@ -141,28 +182,8 @@ router.post(
             provident_fund = EXCLUDED.provident_fund,
             esi = EXCLUDED.esi, professional_tax = EXCLUDED.professional_tax,
             status = EXCLUDED.status, updated_at = NOW(), updated_by = EXCLUDED.created_by`,
-          [
-            employee.id,
-            payrollRunId,
-            month,
-            year,
-            workingDays,
-            presentDays,
-            leaveDays,
-            absentDays,
-            round2(basicEarned),
-            round2(hraEarned),
-            round2(specialAllowance),
-            round2(overtimeHours),
-            overtimePay,
-            round2(pf),
-            round2(esi),
-            pt,
-            PayrollStatus.Processed,
-            req.user?.username ?? 'System',
-          ],
-        );
-      }
+        },
+      );
 
       await dbQuery(
         `UPDATE payroll_runs SET status = $2, processed_date = NOW(), total_employees = $3,

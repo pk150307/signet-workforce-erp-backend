@@ -40,6 +40,8 @@ interface ClientEmployeeRow {
   employee_code: string;
   first_name: string;
   last_name: string;
+  father_name: string | null;
+  soft_code: string | null;
   department_name: string;
   site_name: string;
   site_id: string;
@@ -61,14 +63,30 @@ const EMPTY_REGISTER_EXTRAS: RegisterExtras = {
   bonus: 0,
 };
 
+function employeeIdentity(emp: ClientEmployeeRow) {
+  return {
+    employeeId: emp.id,
+    employeeCode: emp.employee_code,
+    softCode: emp.soft_code ? String(emp.soft_code) : null,
+    employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
+    fatherName: emp.father_name ? String(emp.father_name) : null,
+    departmentName: emp.department_name,
+    siteName: emp.site_name,
+  };
+}
+
 export class AttendanceRepository {
   async getClientEmployees(clientId: string): Promise<ClientEmployeeRow[]> {
     const { rows } = await query<ClientEmployeeRow>(
       `SELECT e.id, e.employee_code, e.first_name, e.last_name,
+              epd.father_name,
+              COALESCE(eed.client_soft_code, e.client_soft_code) AS soft_code,
               d.name AS department_name, s.site_name, s.id AS site_id
        FROM employees e
        INNER JOIN sites s ON s.id = e.site_id AND NOT s.is_deleted
        INNER JOIN departments d ON d.id = e.department_id
+       LEFT JOIN employee_personal_details epd ON epd.employee_id = e.id
+       LEFT JOIN employee_employment_details eed ON eed.employee_id = e.id AND eed.is_current = TRUE
        WHERE s.client_id = $1::uuid
          AND NOT e.is_deleted
          AND e.status IN ($2, $3)
@@ -228,11 +246,7 @@ export class AttendanceRepository {
       const extras = extrasMap.get(emp.id) ?? EMPTY_REGISTER_EXTRAS;
       if (extras.presentDays != null) enteredCount++;
       return {
-        employeeId: emp.id,
-        employeeCode: emp.employee_code,
-        employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
-        departmentName: emp.department_name,
-        siteName: emp.site_name,
+        ...employeeIdentity(emp),
         presentDays: extras.presentDays,
         presentCount: extras.presentDays ?? 0,
         overtimeHours: extras.overtimeHours,
@@ -301,7 +315,9 @@ export class AttendanceRepository {
     const employees: AttendanceGridEmployee[] = items.map((item) => ({
       employeeId: item.employeeId,
       employeeCode: item.employeeCode,
+      softCode: item.softCode,
       employeeName: item.employeeName,
+      fatherName: item.fatherName,
       departmentName: item.departmentName,
       siteName: item.siteName,
       cells: {},
@@ -531,11 +547,7 @@ export class AttendanceRepository {
     const preview: AttendanceGridEmployee[] = employees.map((emp) => {
       const extras = extrasUpdates.get(emp.id) ?? EMPTY_REGISTER_EXTRAS;
       return {
-        employeeId: emp.id,
-        employeeCode: emp.employee_code,
-        employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
-        departmentName: emp.department_name,
-        siteName: emp.site_name,
+        ...employeeIdentity(emp),
         cells: {},
         presentDays: extras.presentDays,
         overtimeHours: extras.overtimeHours,
@@ -599,7 +611,9 @@ export class AttendanceRepository {
 
     let exportEmployees: MonthlyExportEmployee[] = employees.map((emp) => ({
       employeeCode: emp.employee_code,
+      softCode: emp.soft_code ? String(emp.soft_code) : null,
       employeeName: `${emp.first_name} ${emp.last_name}`.trim(),
+      fatherName: emp.father_name ? String(emp.father_name) : null,
       presentDays: null,
       overtimeHours: 0,
       nightAllowance: 0,
@@ -612,7 +626,9 @@ export class AttendanceRepository {
       const grid = await this.getGrid({ clientId, month, year }, user);
       exportEmployees = grid.employees.map((emp) => ({
         employeeCode: emp.employeeCode,
+        softCode: emp.softCode,
         employeeName: emp.employeeName,
+        fatherName: emp.fatherName,
         presentDays: emp.presentDays,
         overtimeHours: emp.overtimeHours,
         nightAllowance: emp.nightAllowance,
@@ -698,10 +714,14 @@ export class AttendanceRepository {
   async getEmployeeCalendar(employeeId: string, month: number, year: number): Promise<EmployeeAttendanceCalendar> {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.id, e.employee_code, e.first_name, e.last_name,
+              epd.father_name,
+              COALESCE(eed.client_soft_code, e.client_soft_code) AS soft_code,
               s.site_name, c.company_name, s.client_id
        FROM employees e
        LEFT JOIN sites s ON s.id = e.site_id
        LEFT JOIN clients c ON c.id = s.client_id
+       LEFT JOIN employee_personal_details epd ON epd.employee_id = e.id
+       LEFT JOIN employee_employment_details eed ON eed.employee_id = e.id AND eed.is_current = TRUE
        WHERE e.id = $1::uuid AND NOT e.is_deleted`,
       [employeeId],
     );
@@ -725,7 +745,9 @@ export class AttendanceRepository {
     return {
       employeeId,
       employeeCode: String(rows[0].employee_code),
+      softCode: rows[0].soft_code ? String(rows[0].soft_code) : null,
       employeeName: `${rows[0].first_name} ${rows[0].last_name}`.trim(),
+      fatherName: rows[0].father_name ? String(rows[0].father_name) : null,
       clientName: rows[0].company_name ? String(rows[0].company_name) : '—',
       siteName: rows[0].site_name ? String(rows[0].site_name) : '—',
       month,

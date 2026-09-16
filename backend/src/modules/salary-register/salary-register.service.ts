@@ -553,12 +553,10 @@ export class SalaryRegisterService {
   }
 
   async exportExcel(id: string): Promise<Buffer> {
-    await this.getById(id);
     return salaryRegisterRepository.exportExcel(id);
   }
 
   async exportPdf(id: string): Promise<Buffer> {
-    await this.getById(id);
     return salaryRegisterRepository.exportPdf(id);
   }
 }

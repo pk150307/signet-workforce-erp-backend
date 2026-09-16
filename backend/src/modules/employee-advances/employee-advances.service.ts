@@ -25,6 +25,7 @@ function buildEntry(
     softCode: src.softCode,
     employeeCode: src.employeeCode,
     employeeName: `${src.firstName} ${src.lastName}`.trim(),
+    fatherName: src.fatherName,
     designation: src.designation,
     advanceAmount: 0,
     notes: null,
@@ -168,6 +169,7 @@ export class EmployeeAdvancesService {
               softCode: src.softCode,
               employeeCode: src.employeeCode,
               employeeName: `${src.firstName} ${src.lastName}`.trim(),
+              fatherName: src.fatherName,
               designation: src.designation,
               salaryNetPay: src.salaryNetPay,
               payableAmount: computePayable(src.salaryNetPay, prior.advanceAmount),
@@ -401,12 +403,10 @@ export class EmployeeAdvancesService {
   }
 
   async exportExcel(id: string): Promise<Buffer> {
-    await this.getById(id);
     return employeeAdvancesRepository.exportExcel(id);
   }
 
   async exportPdf(id: string): Promise<Buffer> {
-    await this.getById(id);
     return employeeAdvancesRepository.exportPdf(id);
   }
 

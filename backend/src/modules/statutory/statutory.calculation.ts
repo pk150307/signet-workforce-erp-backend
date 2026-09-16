@@ -122,7 +122,7 @@ export function computeEmployeePf(basicEarned: number, config: StatutoryContribu
   return applyContributionCap(calculated, config.employeePfMaxAmount || EMPLOYEE_PF_MAX_CONTRIBUTION);
 }
 
-/** Employee ESIC = rate% of ESIC gross earned when applicable and within wage ceiling. */
+/** Employee ESIC = rate% of Gross Total when applicable and within wage ceiling. */
 export function computeEmployeeEsi(
   esiGrossEarned: number,
   monthlyGrossSalary: number,
@@ -176,14 +176,15 @@ export function computeTotalGrossEarned(
   );
 }
 
-/** ESIC base: basic + HRA + night allowance + OT (excludes punctuality award and special allowance). */
+/** ESIC base = Gross Total: basic + HRA + night + OT + punctuality (excludes special allowance). */
 export function computeEsiGrossEarned(
   basicEarned: number,
   hraEarned: number,
   nightAllowance: number,
   overtimePay: number,
+  punctualityAward = 0,
 ): number {
-  return roundOff(basicEarned + hraEarned + nightAllowance + overtimePay);
+  return roundOff(basicEarned + hraEarned + nightAllowance + overtimePay + punctualityAward);
 }
 
 /** LWF base: basic + HRA + night allowance + punctuality + OT + bonus (excludes special allowance). */

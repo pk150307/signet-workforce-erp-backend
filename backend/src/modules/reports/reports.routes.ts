@@ -30,20 +30,22 @@ router.get(
         (req.query.toDate as string) ||
         `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      const summary = await dbQuery<{ status: number; count: string }>(
-        `SELECT status, COUNT(*) AS count FROM attendances
-         WHERE attendance_date BETWEEN $1 AND $2 AND NOT is_deleted GROUP BY status`,
-        [fromDate, toDate],
-      );
+      const [summary, dailyResult] = await Promise.all([
+        dbQuery<{ status: number; count: string }>(
+          `SELECT status, COUNT(*) AS count FROM attendances
+           WHERE attendance_date BETWEEN $1 AND $2 AND NOT is_deleted GROUP BY status`,
+          [fromDate, toDate],
+        ),
+        dbQuery<Record<string, unknown>>(
+          `SELECT attendance_date, status, COUNT(*) AS count FROM attendances
+           WHERE attendance_date BETWEEN $1 AND $2 AND NOT is_deleted
+           GROUP BY attendance_date, status ORDER BY attendance_date`,
+          [fromDate, toDate],
+        ),
+      ]);
 
       const byStatus = Object.fromEntries(summary.rows.map((r) => [r.status, parseInt(r.count, 10)]));
-
-      const { rows: daily } = await dbQuery<Record<string, unknown>>(
-        `SELECT attendance_date, status, COUNT(*) AS count FROM attendances
-         WHERE attendance_date BETWEEN $1 AND $2 AND NOT is_deleted
-         GROUP BY attendance_date, status ORDER BY attendance_date`,
-        [fromDate, toDate],
-      );
+      const daily = dailyResult.rows;
 
       sendSuccess(res, {
         period: { fromDate, toDate, month, year },
@@ -80,22 +82,29 @@ router.get(
       const month = Number(req.query.month) || new Date().getMonth() + 1;
       const year = Number(req.query.year) || new Date().getFullYear();
 
-      const { rows: runs } = await dbQuery<Record<string, unknown>>(
-        `SELECT id, run_code, status, total_employees, total_gross, total_deductions, total_net, processed_date
-         FROM payroll_runs WHERE month = $1 AND year = $2 AND NOT is_deleted`,
-        [month, year],
-      );
-
-      const { rows: entries } = await dbQuery<Record<string, unknown>>(
-        `SELECT pe.basic_salary, pe.house_rent_allowance, pe.special_allowance,
-                pe.provident_fund, pe.esi, pe.professional_tax,
-                e.employee_code, e.first_name, e.last_name
-         FROM payroll_entries pe
-         INNER JOIN employees e ON e.id = pe.employee_id
-         WHERE pe.month = $1 AND pe.year = $2 AND NOT pe.is_deleted
-         ORDER BY e.employee_code`,
-        [month, year],
-      );
+      const [runsResult, entriesResult] = await Promise.all([
+        dbQuery<Record<string, unknown>>(
+          `SELECT id, run_code, status, total_employees, total_gross, total_deductions, total_net, processed_date
+           FROM payroll_runs WHERE month = $1 AND year = $2 AND NOT is_deleted`,
+          [month, year],
+        ),
+        dbQuery<Record<string, unknown>>(
+          `SELECT pe.basic_salary, pe.house_rent_allowance, pe.special_allowance,
+                  pe.provident_fund, pe.esi, pe.professional_tax,
+                  e.employee_code, e.first_name, e.last_name,
+                  epd.father_name,
+                  COALESCE(eed.client_soft_code, e.client_soft_code) AS soft_code
+           FROM payroll_entries pe
+           INNER JOIN employees e ON e.id = pe.employee_id
+           LEFT JOIN employee_personal_details epd ON epd.employee_id = e.id
+           LEFT JOIN employee_employment_details eed ON eed.employee_id = e.id AND eed.is_current = TRUE
+           WHERE pe.month = $1 AND pe.year = $2 AND NOT pe.is_deleted
+           ORDER BY e.employee_code`,
+          [month, year],
+        ),
+      ]);
+      const runs = runsResult.rows;
+      const entries = entriesResult.rows;
 
       interface PayrollTotals {
         gross: number;
@@ -142,7 +151,9 @@ router.get(
         },
         employees: entries.map((r) => ({
           employeeCode: String(r.employee_code),
+          softCode: r.soft_code ? String(r.soft_code) : null,
           employeeName: `${r.first_name} ${r.last_name}`,
+          fatherName: r.father_name ? String(r.father_name) : null,
           basicSalary: toNumber(r.basic_salary as string),
           hra: toNumber(r.house_rent_allowance as string),
           specialAllowance: toNumber(r.special_allowance as string),

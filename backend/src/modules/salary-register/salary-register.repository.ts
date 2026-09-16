@@ -20,6 +20,7 @@ import {
 } from './salary-register.types';
 import { normalizeSalaryStatutoryConfig, SalaryStatutoryConfig } from './salary-register.calculation';
 import { PoolClient } from 'pg';
+import { executeBatchInsert } from '../../utils/batch-insert';
 
 export interface SourceEmployeeForSalary {
   employeeId: string;
@@ -130,6 +131,17 @@ const EXPORT_HEADERS = [
   'LWF',
   'T.DED',
   'NET.PAY',
+  'Aadhaar',
+  'A/C No',
+  'UAN',
+  'ESI No',
+  'PF Eligible',
+  'ESI Eligible',
+  'LWF Eligible',
+  'Validation',
+] as const;
+
+const SALARY_PDF_OMIT_HEADERS = [
   'Aadhaar',
   'A/C No',
   'UAN',
@@ -327,10 +339,13 @@ export class SalaryRegisterRepository {
 
   async insertEmployeeRows(rows: InsertSalaryEmployeeRow[], client?: PoolClient): Promise<void> {
     if (!rows.length) return;
-    const runner = client ?? null;
+    const queryFn = client
+      ? (sql: string, params?: unknown[]) => client.query(sql, params)
+      : query;
 
-    for (const row of rows) {
-      const sql = `INSERT INTO salary_register_employees (
+    await executeBatchInsert(
+      queryFn,
+      `INSERT INTO salary_register_employees (
           salary_register_id, employee_id, source_attendance_extras_id,
           soft_code, employee_code, employee_name, father_name, designation,
           aadhaar_number, account_number, uan_number, esi_number,
@@ -339,12 +354,8 @@ export class SalaryRegisterRepository {
           att_aw_afd, gross_total, esic, epf, lwf,
           total_deduction, net_pay, ot_basis, pf_eligible, esi_eligible, lwf_eligible,
           validation_status, validation_messages, calculation_version, row_status
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
-          $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
-          $35,$36::jsonb,$37,$38
-        )`;
-      const params = [
+        ) VALUES`,
+      rows.map((row) => [
         row.salaryRegisterId,
         row.employeeId,
         row.sourceAttendanceExtrasId,
@@ -383,10 +394,9 @@ export class SalaryRegisterRepository {
         JSON.stringify(row.validationMessages),
         row.calculationVersion,
         row.rowStatus,
-      ];
-      if (runner) await runner.query(sql, params);
-      else await query(sql, params);
-    }
+      ]),
+      { casts: { 36: '::jsonb' }, chunkSize: 40 },
+    );
   }
 
   async updateRegisterTotals(
@@ -704,6 +714,7 @@ export class SalaryRegisterRepository {
       headers: [...EXPORT_HEADERS],
       rows: this.buildExportDataRows(detail),
       landscape: true,
+      omitHeaders: [...SALARY_PDF_OMIT_HEADERS],
     });
   }
 

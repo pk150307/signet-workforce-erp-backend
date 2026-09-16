@@ -6,7 +6,7 @@ import {
   finalizeCursorPage,
   parseCursorPaginationQuery,
 } from '../../types';
-import { PfEsicDetail, PfEsicListItem, PfEsicStatus, PF_ESIC_EXPORT_HEADERS, StatutoryFilter, UpsertPfEsicInput } from './statutory.types';
+import { PfEsicDetail, PfEsicListItem, PfEsicStatus, PF_ESIC_EXPORT_HEADERS, PF_ESIC_PDF_OMIT_HEADERS, StatutoryFilter, UpsertPfEsicInput } from './statutory.types';
 import { formatDate } from '../../utils/formatters';
 import { buildExcelBuffer } from '../../utils/excel-export';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
@@ -20,11 +20,15 @@ export class StatutoryRepository {
     LEFT JOIN sites s ON s.id = e.site_id
     LEFT JOIN clients c ON c.id = s.client_id AND NOT c.is_deleted
     LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
+    LEFT JOIN employee_personal_details epd ON epd.employee_id = e.id
+    LEFT JOIN employee_employment_details eed ON eed.employee_id = e.id AND eed.is_current = TRUE
     WHERE NOT e.is_deleted
   `;
 
   private listSelect = `
     SELECT e.id, e.employee_code, e.first_name, e.last_name, e.status AS employee_status,
+           epd.father_name,
+           COALESCE(eed.client_soft_code, e.client_soft_code) AS soft_code,
            d.name AS department_name,
            des.name AS designation_name, s.site_name, c.company_name AS client_company_name,
            e.pan_number, e.aadhaar_number,
@@ -47,6 +51,8 @@ export class StatutoryRepository {
       conditions.push(`(
         LOWER(e.first_name || ' ' || e.last_name) LIKE $${i} OR
         LOWER(e.employee_code) LIKE $${i} OR
+        LOWER(COALESCE(epd.father_name, '')) LIKE $${i} OR
+        LOWER(COALESCE(eed.client_soft_code, e.client_soft_code, '')) LIKE $${i} OR
         LOWER(COALESCE(esd.pf_number, e.pf_number, '')) LIKE $${i} OR
         LOWER(COALESCE(esd.esi_number, e.esi_number, '')) LIKE $${i} OR
         LOWER(COALESCE(esd.uan_number, e.uan_number, '')) LIKE $${i}
@@ -122,6 +128,8 @@ export class StatutoryRepository {
     const direction: 'ASC' | 'DESC' = sortDir === 'desc' ? 'DESC' : 'ASC';
     const primary: Record<string, CursorSortField[]> = {
       employeeCode: [{ column: 'e.employee_code', key: 'employeeCode', direction }],
+      softCode: [{ column: 'COALESCE(eed.client_soft_code, e.client_soft_code)', key: 'softCode', direction }],
+      fatherName: [{ column: 'epd.father_name', key: 'fatherName', direction }],
       fullName: [
         { column: 'e.first_name', key: 'firstName', direction },
         { column: 'e.last_name', key: 'lastName', direction },
@@ -180,7 +188,9 @@ export class StatutoryRepository {
       const item = this.mapListItem(r);
       return [
         item.employeeCode,
+        item.softCode ?? '',
         item.fullName,
+        item.fatherName ?? '',
         item.clientCompanyName ?? '',
         item.designation,
         item.siteName ?? '',
@@ -199,6 +209,7 @@ export class StatutoryRepository {
         headers: [...PF_ESIC_EXPORT_HEADERS],
         rows: dataRows,
         landscape: true,
+        omitHeaders: [...PF_ESIC_PDF_OMIT_HEADERS],
       });
     }
 
@@ -208,6 +219,8 @@ export class StatutoryRepository {
   async findByEmployeeId(employeeId: string): Promise<PfEsicDetail | null> {
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.id, e.employee_code, e.first_name, e.last_name, e.status AS employee_status,
+              epd.father_name,
+              COALESCE(eed.client_soft_code, e.client_soft_code) AS soft_code,
               d.name AS department_name,
               des.name AS designation_name, s.site_name, e.pan_number, e.aadhaar_number,
               e.bank_name, e.account_number, e.ifsc_code,
@@ -434,7 +447,9 @@ export class StatutoryRepository {
       id: String(r.statutory_id ?? r.id),
       employeeId: String(r.id),
       employeeCode: String(r.employee_code),
+      softCode: r.soft_code ? String(r.soft_code) : null,
       fullName: `${r.first_name} ${r.last_name}`,
+      fatherName: r.father_name ? String(r.father_name) : null,
       department: String(r.department_name),
       designation: String(r.designation_name),
       clientCompanyName: r.client_company_name ? String(r.client_company_name) : null,

@@ -11,7 +11,9 @@ export interface PayslipListItem {
   slipNumber: string;
   employeeId: string;
   employeeCode: string;
+  softCode: string | null;
   employeeName: string;
+  fatherName: string | null;
   department: string;
   designation: string;
   month: number;
@@ -53,6 +55,7 @@ export interface PayslipPrintData {
     code: string;
     name: string;
     softCode: string | null;
+    fatherName: string | null;
     department: string;
     designation: string;
     siteName: string | null;

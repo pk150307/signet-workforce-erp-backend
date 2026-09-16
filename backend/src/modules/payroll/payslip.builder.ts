@@ -104,6 +104,7 @@ export function buildPayslipBreakdown(input: PayslipBuildInput): PayslipBuildRes
     input.hraEarned,
     input.nightAllowance,
     input.overtimePay,
+    input.punctualityAward,
   );
 
   const lwfGross = computeStatutoryGrossEarned(
@@ -134,7 +135,7 @@ export function buildPayslipBreakdown(input: PayslipBuildInput): PayslipBuildRes
     deductions.push({
       code: 'ESI',
       label: 'ESIC',
-      note: `${input.statutoryConfig.employeeEsiPercentage}% of Gross Earned (excl. Punctuality Award)`,
+      note: `${input.statutoryConfig.employeeEsiPercentage}% of Gross Total`,
       amount: esi,
     });
   }

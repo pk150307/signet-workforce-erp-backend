@@ -98,8 +98,10 @@ export const BULK_IMPORT_HEADERS = [
 
 export const BULK_EXPORT_HEADERS = [
   'employeeCode',
+  'softCode',
   'firstName',
   'lastName',
+  'fatherName',
   'email',
   'phone',
   'status',
@@ -110,3 +112,5 @@ export const BULK_EXPORT_HEADERS = [
   'basicSalary',
   'grossSalary',
 ] as const;
+
+export const EMPLOYEE_PDF_OMIT_HEADERS = ['status'] as const;

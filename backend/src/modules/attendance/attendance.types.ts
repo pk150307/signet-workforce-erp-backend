@@ -71,7 +71,9 @@ export interface AttendanceRegisterMeta {
 export interface AttendanceEmployeeListItem {
   employeeId: string;
   employeeCode: string;
+  softCode: string | null;
   employeeName: string;
+  fatherName: string | null;
   departmentName: string;
   siteName: string;
   presentDays: number | null;
@@ -93,7 +95,9 @@ export interface AttendanceEmployeeListItem {
 export interface AttendanceGridEmployee {
   employeeId: string;
   employeeCode: string;
+  softCode: string | null;
   employeeName: string;
+  fatherName: string | null;
   departmentName: string;
   siteName: string;
   /** Always empty under monthly present-days model; kept for API compatibility. */
@@ -195,7 +199,9 @@ export interface UnlockLogEntry {
 export interface EmployeeAttendanceCalendar {
   employeeId: string;
   employeeCode: string;
+  softCode: string | null;
   employeeName: string;
+  fatherName: string | null;
   clientName: string;
   siteName: string;
   month: number;
