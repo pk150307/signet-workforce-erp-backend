@@ -111,9 +111,6 @@
           "uanNumber": {
             "type": "string"
           },
-          "pfNumber": {
-            "type": "string"
-          },
           "pfJoiningDate": {
             "type": "string",
             "format": "date"
@@ -539,12 +536,12 @@
         "tags": [
           "Employees"
         ],
-        "summary": "Export employees as CSV",
+        "summary": "Export employees as Excel",
         "responses": {
           "200": {
-            "description": "CSV file",
+            "description": "Excel (.xlsx) file",
             "content": {
-              "text/csv": {}
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
             }
           }
         }

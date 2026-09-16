@@ -20,7 +20,6 @@ import {
   computeEmployeeEsi,
   computeEmployeeLwf,
   computeEmployeePf,
-  computeEsiGrossEarned,
   computeStatutoryGrossEarned,
   resolveStatutoryConfig,
 } from '../modules/statutory/statutory.calculation';
@@ -132,7 +131,7 @@ describe('salary-register.calculation', () => {
         employee_lwf_max_amount: config.employeeLwfMaxAmount,
       });
 
-      const esiGross = computeEsiGrossEarned(row.earningBasic, row.earningHra, row.nAll, row.otAmount);
+      const esiGross = row.grossTotal;
       const lwfGross = computeStatutoryGrossEarned(
         row.earningBasic,
         row.earningHra,
@@ -149,6 +148,9 @@ describe('salary-register.calculation', () => {
       expect(row.grossTotal).toBe(row.grossEarnings + 400);
       expect(row.epf).toBe(computeEmployeePf(row.earningBasic, statutory));
       expect(row.esic).toBe(computeEmployeeEsi(esiGross, row.fixedTotal, statutory));
+      expect(row.esic).not.toBe(
+        computeEmployeeEsi(row.grossEarnings, row.fixedTotal, statutory),
+      );
       expect(row.lwf).toBe(computeEmployeeLwf(lwfGross, statutory));
       // LWF includes punctuality (+ bonus); must not equal rate% of grossEarnings alone
       expect(row.lwf).not.toBe(Math.min(Math.round(row.grossEarnings * 0.002), 300));
@@ -173,15 +175,21 @@ describe('salary-register.calculation', () => {
 
   describe('ESIC', () => {
     it('returns 0 when not eligible', () => {
-      expect(calculateEsic(15000, 1000, 0, 0, 16000, false, config)).toBe(0);
+      expect(calculateEsic(16000, 16000, false, config)).toBe(0);
     });
 
-    it('applies rate on ESI gross (basic+hra+night+OT)', () => {
-      expect(calculateEsic(10000, 2000, 500, 500, 12000, true, config)).toBe(98);
+    it('applies rate on Gross Total (Gross Earn + ATT/AW AFD)', () => {
+      expect(calculateEsic(13000, 12000, true, config)).toBe(98);
+    });
+
+    it('includes punctuality so Gross Total ESIC exceeds Gross Earn ESIC', () => {
+      const onGrossEarn = calculateEsic(13000, 12000, true, config);
+      const onGrossTotal = calculateEsic(13400, 12000, true, config);
+      expect(onGrossTotal).toBeGreaterThan(onGrossEarn);
     });
 
     it('returns 0 when monthly gross above ₹21,000 ceiling', () => {
-      expect(calculateEsic(20000, 5000, 0, 0, 25000, true, config)).toBe(0);
+      expect(calculateEsic(25000, 25000, true, config)).toBe(0);
     });
   });
 
