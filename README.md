@@ -73,7 +73,7 @@ The API starts at **http://localhost:5000**.
 | Field | Value |
 |-------|-------|
 | Email | `contact@signetcorporateservices.com` |
-| Password | `hrSignet@123` |
+| Password | `contactSignet@123` |
 
 To reset the default accounts on an existing database:
 
