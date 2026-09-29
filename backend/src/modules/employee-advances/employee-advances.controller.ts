@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { parsePageSize } from '../../types';
 import { paramId } from '../../utils/request';
+import { parseExportColumnQuery } from '../../utils/export-columns';
 import { employeeAdvancesService } from './employee-advances.service';
 import { EmployeeAdvanceFilter, EmployeeAdvanceStatus } from './employee-advances.types';
 
@@ -100,7 +101,8 @@ export class EmployeeAdvancesController {
 
   async exportExcel(req: Request, res: Response): Promise<void> {
     const id = paramId(req);
-    const buffer = await employeeAdvancesService.exportExcel(id);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await employeeAdvancesService.exportExcel(id, columns);
     const detail = await employeeAdvancesService.getById(id);
     const filename = `employee-advances-${detail.clientCode || detail.clientId}-${detail.year}-${String(detail.month).padStart(2, '0')}.xlsx`;
     res.setHeader(
@@ -113,7 +115,8 @@ export class EmployeeAdvancesController {
 
   async exportPdf(req: Request, res: Response): Promise<void> {
     const id = paramId(req);
-    const buffer = await employeeAdvancesService.exportPdf(id);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await employeeAdvancesService.exportPdf(id, columns);
     const detail = await employeeAdvancesService.getById(id);
     const filename = `employee-advances-${detail.clientCode || detail.clientId}-${detail.year}-${String(detail.month).padStart(2, '0')}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');

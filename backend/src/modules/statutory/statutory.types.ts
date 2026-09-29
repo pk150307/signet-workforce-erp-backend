@@ -101,21 +101,23 @@ export interface StatutoryFilter {
   esiApplicable?: boolean;
 }
 
-export const PF_ESIC_EXPORT_HEADERS = [
-  'Employee Code',
-  'Soft Code',
-  'Full Name',
-  'Father Name',
-  'Client',
-  'Designation',
-  'Site',
-  'Aadhaar Number',
-  'UAN Number',
-  'ESIC Number',
-  'PAN Number',
-  'Status',
-  'Effective Date',
+export const PF_ESIC_EXPORT_COLUMNS = [
+  { key: 'employeeCode', label: 'Employee Code' },
+  { key: 'softCode', label: 'Soft Code' },
+  { key: 'fullName', label: 'Full Name' },
+  { key: 'fatherName', label: 'Father Name' },
+  { key: 'client', label: 'Client' },
+  { key: 'designation', label: 'Designation' },
+  { key: 'site', label: 'Site' },
+  { key: 'aadhaarNumber', label: 'Aadhaar Number' },
+  { key: 'uanNumber', label: 'UAN Number' },
+  { key: 'esicNumber', label: 'ESIC Number' },
+  { key: 'panNumber', label: 'PAN Number' },
+  { key: 'status', label: 'Status' },
+  { key: 'effectiveDate', label: 'Effective Date' },
 ] as const;
+
+export const PF_ESIC_EXPORT_HEADERS = PF_ESIC_EXPORT_COLUMNS.map((column) => column.label);
 
 /** PDF drops Status / Effective Date so identity numbers stay on one line. */
 export const PF_ESIC_PDF_OMIT_HEADERS = ['Status', 'Effective Date'] as const;

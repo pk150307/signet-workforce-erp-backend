@@ -49,18 +49,20 @@ export interface AuditLogSummary {
 
 export const AUDIT_LOG_EXPORT_MAX_ROWS = 10_000;
 
-export const AUDIT_LOG_EXPORT_HEADERS = [
-  'Created At',
-  'User',
-  'Email',
-  'Module',
-  'Action',
-  'Entity Type',
-  'Entity ID',
-  'IP Address',
-  'Browser',
-  'Operating System',
-  'Created By',
+export const AUDIT_LOG_EXPORT_COLUMNS = [
+  { key: 'createdAt', label: 'Created At' },
+  { key: 'user', label: 'User' },
+  { key: 'email', label: 'Email' },
+  { key: 'module', label: 'Module' },
+  { key: 'action', label: 'Action' },
+  { key: 'entityType', label: 'Entity Type' },
+  { key: 'entityId', label: 'Entity ID' },
+  { key: 'ipAddress', label: 'IP Address' },
+  { key: 'browser', label: 'Browser' },
+  { key: 'operatingSystem', label: 'Operating System' },
+  { key: 'createdBy', label: 'Created By' },
 ] as const;
+
+export const AUDIT_LOG_EXPORT_HEADERS = AUDIT_LOG_EXPORT_COLUMNS.map((column) => column.label);
 
 export const AUDIT_LOG_PDF_OMIT_HEADERS = ['Browser', 'Operating System'] as const;

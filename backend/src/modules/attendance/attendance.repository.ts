@@ -242,7 +242,21 @@ export class AttendanceRepository {
     const locked = String(register?.status ?? 'draft') === 'locked';
     let enteredCount = 0;
 
-    const items = employees.map((emp) => {
+    const sortKey = (filter.sortBy ?? '').toLowerCase();
+    const sortDir = filter.sortDir === 'desc' ? -1 : 1;
+    const sortedEmployees = [...employees].sort((a, b) => {
+      const left = sortKey === 'softcode'
+        ? String(a.soft_code ?? '')
+        : String(a.employee_code ?? '');
+      const right = sortKey === 'softcode'
+        ? String(b.soft_code ?? '')
+        : String(b.employee_code ?? '');
+      return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }) * (
+        sortKey === 'softcode' || sortKey === 'code' || sortKey === 'employeecode' ? sortDir : 1
+      );
+    });
+
+    const items = sortedEmployees.map((emp) => {
       const extras = extrasMap.get(emp.id) ?? EMPTY_REGISTER_EXTRAS;
       if (extras.presentDays != null) enteredCount++;
       return {
@@ -606,6 +620,7 @@ export class AttendanceRepository {
     user: string,
     includeData: boolean,
     format: 'excel' | 'pdf' = 'excel',
+    columns?: string[],
   ): Promise<Buffer> {
     const employees = await this.getClientEmployees(clientId);
 
@@ -637,14 +652,17 @@ export class AttendanceRepository {
       }));
     }
 
+    const selectedColumns = includeData ? columns : undefined;
+
     if (format === 'pdf') {
       return buildMonthlyPdf(exportEmployees, {
         title: 'Attendance Register',
         subtitle: `${String(month).padStart(2, '0')}/${year}`,
+        columns: selectedColumns,
       });
     }
 
-    return buildMonthlyWorkbook(exportEmployees);
+    return buildMonthlyWorkbook(exportEmployees, selectedColumns);
   }
 
   async lockRegister(clientId: string, month: number, year: number, user: string) {

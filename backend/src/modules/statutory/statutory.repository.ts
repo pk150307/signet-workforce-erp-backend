@@ -6,9 +6,10 @@ import {
   finalizeCursorPage,
   parseCursorPaginationQuery,
 } from '../../types';
-import { PfEsicDetail, PfEsicListItem, PfEsicStatus, PF_ESIC_EXPORT_HEADERS, PF_ESIC_PDF_OMIT_HEADERS, StatutoryFilter, UpsertPfEsicInput } from './statutory.types';
+import { PfEsicDetail, PfEsicListItem, PfEsicStatus, PF_ESIC_EXPORT_COLUMNS, PF_ESIC_PDF_OMIT_HEADERS, StatutoryFilter, UpsertPfEsicInput } from './statutory.types';
 import { formatDate } from '../../utils/formatters';
 import { buildExcelBuffer } from '../../utils/excel-export';
+import { applyExportColumnSelection } from '../../utils/export-columns';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
 import { EmployeeLifecycleStatus } from '../employee/employee.constants';
 
@@ -174,6 +175,7 @@ export class StatutoryRepository {
   async exportCsv(
     filter: StatutoryFilter,
     format: 'excel' | 'pdf' = 'excel',
+    columns?: string[],
   ): Promise<Buffer> {
     const { extra, params } = this.buildFilter(filter);
 
@@ -203,17 +205,24 @@ export class StatutoryRepository {
       ];
     });
 
+    const selected = applyExportColumnSelection(
+      PF_ESIC_EXPORT_COLUMNS,
+      columns,
+      dataRows,
+      PF_ESIC_PDF_OMIT_HEADERS,
+    );
+
     if (format === 'pdf') {
       return buildPdfTableBuffer({
         title: 'PF-ESIC',
-        headers: [...PF_ESIC_EXPORT_HEADERS],
-        rows: dataRows,
+        headers: selected.headers,
+        rows: selected.rows,
         landscape: true,
-        omitHeaders: [...PF_ESIC_PDF_OMIT_HEADERS],
+        omitHeaders: selected.omitHeaders,
       });
     }
 
-    return buildExcelBuffer('PF-ESIC', [...PF_ESIC_EXPORT_HEADERS], dataRows);
+    return buildExcelBuffer('PF-ESIC', selected.headers, selected.rows);
   }
 
   async findByEmployeeId(employeeId: string): Promise<PfEsicDetail | null> {

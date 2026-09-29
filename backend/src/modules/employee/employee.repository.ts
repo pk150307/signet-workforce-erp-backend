@@ -22,14 +22,15 @@ import {
   UpdateEmployeeInput,
 } from './employee.types';
 import {
-  BULK_EXPORT_HEADERS,
   EMPLOYEE_CODE_PAD_LENGTH,
   EMPLOYEE_CODE_PREFIX,
   EMPLOYEE_PDF_OMIT_HEADERS,
   EmployeeLifecycleStatus,
+  resolveEmployeeExportColumns,
 } from './employee.constants';
 import {
   CursorPaginatedResult,
+  CursorSortField,
   buildCursorSql,
   defaultSortFields,
   finalizeCursorPage,
@@ -42,7 +43,7 @@ import {
   resolveDesignationId,
   resolveDesignationGradeId,
 } from '../../utils/organization';
-import { formatDate, formatDateTime, toNumber } from '../../utils/formatters';
+import { formatDate, formatDateTime, formatPersonName, toNumber } from '../../utils/formatters';
 import { nextEmployeeCode } from '../../utils/next-code';
 import { buildExcelBuffer } from '../../utils/excel-export';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
@@ -238,6 +239,71 @@ export class EmployeeRepository {
     return rows.length > 0;
   }
 
+  async clientSoftCodeExists(
+    softCode: string,
+    clientId: string,
+    excludeEmployeeId?: string,
+  ): Promise<boolean> {
+    const normalized = softCode.trim().toLowerCase();
+    if (!normalized || !clientId) return false;
+    const params: unknown[] = [normalized, clientId];
+    let sql = `
+      SELECT 1
+      FROM employees e
+      LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
+      LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
+      WHERE NOT e.is_deleted
+        AND LOWER(TRIM(COALESCE(ed.client_soft_code, e.client_soft_code, ''))) = $1
+        AND s.client_id = $2::uuid
+    `;
+    if (excludeEmployeeId) {
+      sql += ' AND e.id <> $3::uuid';
+      params.push(excludeEmployeeId);
+    }
+    sql += ' LIMIT 1';
+    const { rows } = await query(sql, params);
+    return rows.length > 0;
+  }
+
+  private buildSortFields(sortBy?: string, sortDir?: string): CursorSortField[] {
+    const direction: 'ASC' | 'DESC' = sortDir === 'desc' ? 'DESC' : 'ASC';
+    const normalized = (sortBy ?? '').trim().toLowerCase();
+    const primary: Record<string, CursorSortField[]> = {
+      code: [{ column: 'e.employee_code', key: 'employeeCode', direction }],
+      employeecode: [{ column: 'e.employee_code', key: 'employeeCode', direction }],
+      softcode: [{
+        column: `LOWER(COALESCE(NULLIF(TRIM(COALESCE(ed.client_soft_code, e.client_soft_code)), ''), e.employee_code))`,
+        key: 'softCodeSort',
+        direction,
+      }],
+      clientsoftcode: [{
+        column: `LOWER(COALESCE(NULLIF(TRIM(COALESCE(ed.client_soft_code, e.client_soft_code)), ''), e.employee_code))`,
+        key: 'softCodeSort',
+        direction,
+      }],
+      name: [
+        { column: 'COALESCE(pd.first_name, e.first_name)', key: 'firstName', direction },
+        { column: 'e.employee_code', key: 'employeeCode', direction },
+      ],
+      fullname: [
+        { column: 'COALESCE(pd.first_name, e.first_name)', key: 'firstName', direction },
+        { column: 'e.employee_code', key: 'employeeCode', direction },
+      ],
+      joiningdate: [{ column: 'COALESCE(ed.joining_date, e.joining_date)', key: 'joiningDate', direction }],
+    };
+
+    if (normalized === 'createdat' || !primary[normalized]) {
+      return defaultSortFields('e');
+    }
+
+    const fields = [...primary[normalized]];
+    if (!fields.some((field) => field.key === 'employeeCode')) {
+      fields.push({ column: 'e.employee_code', key: 'employeeCode', direction: 'ASC' });
+    }
+    fields.push({ column: 'e.id', key: 'id', direction: 'ASC' });
+    return fields;
+  }
+
   private async mapListRow(r: Record<string, unknown>): Promise<EmployeeListItem> {
     const softCode = r.client_soft_code ? String(r.client_soft_code) : null;
     return {
@@ -245,10 +311,10 @@ export class EmployeeRepository {
       employeeCode: String(r.employee_code),
       softCode,
       clientSoftCode: softCode,
-      fullName: `${r.first_name} ${r.last_name}`.trim(),
+      fullName: formatPersonName(String(r.first_name ?? ''), String(r.last_name ?? '')),
       fatherName: r.father_name ? String(r.father_name) : null,
       email: r.email ? String(r.email) : '',
-      phone: String(r.phone),
+      phone: String(r.phone ?? ''),
       department: String(r.department_name ?? ''),
       designation: String(r.designation_name ?? ''),
       siteName: r.site_name ? String(r.site_name) : null,
@@ -256,6 +322,13 @@ export class EmployeeRepository {
       joiningDate: formatDate(String(r.joining_date))!,
       profilePhotoUrl:
         resolveFileUrl(r.profile_photo_url ? String(r.profile_photo_url) : null) || null,
+      uanNumber: r.uan_number ? String(r.uan_number) : null,
+      esiNumber: r.esi_number ? String(r.esi_number) : null,
+      aadhaarNumber: r.aadhaar_number ? String(r.aadhaar_number) : null,
+      bankName: r.bank_name ? String(r.bank_name) : null,
+      accountNumber: r.account_number ? String(r.account_number) : null,
+      ifscCode: r.ifsc_code ? String(r.ifsc_code) : null,
+      accountHolderName: r.account_holder_name ? String(r.account_holder_name) : null,
     };
   }
 
@@ -263,8 +336,8 @@ export class EmployeeRepository {
     return {
       id: String(r.id),
       employeeCode: String(r.employee_code),
-      firstName: String(r.first_name),
-      lastName: String(r.last_name),
+      firstName: String(r.first_name ?? ''),
+      lastName: String(r.last_name ?? ''),
       fatherName: r.father_name ? String(r.father_name) : null,
       email: r.email ? String(r.email) : '',
       phone: String(r.phone),
@@ -288,8 +361,10 @@ export class EmployeeRepository {
       gradeCode: r.grade_code ? String(r.grade_code) : null,
       gradeName: r.grade_name ? String(r.grade_name) : null,
       reportingManagerId: r.reporting_manager_id ? String(r.reporting_manager_id) : null,
-      reportingManagerName:
-        r.rm_first_name && r.rm_last_name ? `${r.rm_first_name} ${r.rm_last_name}` : null,
+      reportingManagerName: formatPersonName(
+        r.rm_first_name ? String(r.rm_first_name) : '',
+        r.rm_last_name ? String(r.rm_last_name) : '',
+      ) || null,
       siteId: r.site_id ? String(r.site_id) : null,
       siteName: r.site_name ? String(r.site_name) : null,
       clientId: r.client_id ? String(r.client_id) : null,
@@ -472,7 +547,7 @@ export class EmployeeRepository {
       paramIndex++;
     }
 
-    const sortFields = defaultSortFields('e');
+    const sortFields = this.buildSortFields(filter.sortBy, filter.sortDir);
     const cursorSql = buildCursorSql(paramIndex, pagination, sortFields);
     if (cursorSql.whereClause) {
       conditions.push(cursorSql.whereClause);
@@ -487,8 +562,13 @@ export class EmployeeRepository {
               COALESCE(pd.last_name, e.last_name) AS last_name,
               pd.father_name,
               COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
+              LOWER(COALESCE(NULLIF(TRIM(COALESCE(ed.client_soft_code, e.client_soft_code)), ''), e.employee_code)) AS soft_code_sort,
               COALESCE(pd.profile_photo_url, e.profile_photo_url) AS profile_photo_url,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
+              COALESCE(esd.uan_number, e.uan_number) AS uan_number,
+              COALESCE(esd.esi_number, e.esi_number) AS esi_number,
+              e.aadhaar_number,
+              bd.bank_name, bd.account_number, bd.ifsc_code, bd.account_holder_name,
               d.name AS department_name, des.name AS designation_name, s.site_name
        FROM employees e
        LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
@@ -496,6 +576,8 @@ export class EmployeeRepository {
        INNER JOIN departments d ON d.id = COALESCE(ed.department_id, e.department_id)
        INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
+       LEFT JOIN employee_bank_details bd ON bd.employee_id = e.id
+       LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
        WHERE ${where}
        ORDER BY ${cursorSql.orderBy}
        LIMIT $${paramIndex}`,
@@ -647,7 +729,7 @@ export class EmployeeRepository {
     return rows.map((r) => ({
       id: String(r.id),
       employeeId: String(r.employee_id),
-      employeeName: `${r.first_name} ${r.last_name}`.trim(),
+      employeeName: formatPersonName(String(r.first_name ?? ''), String(r.last_name ?? '')),
       employeeCode: String(r.employee_code),
       type: activityMap[String(r.event_type)] ?? 'updated',
       description: String(r.description ?? r.title),
@@ -717,10 +799,10 @@ export class EmployeeRepository {
 
   private draftDefaults(input: SaveEmployeeDraftInput) {
     const firstName = input.firstName?.trim() || 'Draft';
-    const lastName = input.lastName?.trim() || 'Employee';
+    const lastName = input.lastName?.trim() ?? '';
     const email = input.email?.trim().toLowerCase() || null;
     const phone = input.phone?.trim() || '0000000000';
-    const dateOfBirth = input.dateOfBirth || '1990-01-01';
+    const dateOfBirth = formatDate(input.dateOfBirth) || '1990-01-01';
     const gender = input.gender ?? 4;
     const joiningDate = input.joiningDate || formatDate(new Date())!;
     const employmentType = input.employmentType ?? 1;
@@ -775,10 +857,10 @@ export class EmployeeRepository {
       [
         employeeId,
         input.firstName?.trim() || d.firstName,
-        input.lastName?.trim() || d.lastName,
+        input.lastName?.trim() ?? d.lastName,
         input.fatherName?.trim() || null,
         input.alternatePhone ?? null,
-        input.dateOfBirth || d.dateOfBirth,
+        formatDate(input.dateOfBirth) || d.dateOfBirth,
         input.gender ?? d.gender,
         input.presentAddress ?? null,
         input.permanentAddress ?? null,
@@ -814,7 +896,7 @@ export class EmployeeRepository {
           parseOptionalUuid(input.reportingManagerId),
           parseOptionalUuid(input.siteId),
           parseOptionalUuid(input.shiftId),
-          input.joiningDate || d.joiningDate,
+          formatDate(input.joiningDate) || d.joiningDate,
           basicSalary,
           houseRentAllowance,
           specialAllowance,
@@ -841,7 +923,7 @@ export class EmployeeRepository {
           parseOptionalUuid(input.reportingManagerId),
           parseOptionalUuid(input.siteId),
           parseOptionalUuid(input.shiftId),
-          input.joiningDate || d.joiningDate,
+          formatDate(input.joiningDate) || d.joiningDate,
           basicSalary,
           houseRentAllowance,
           specialAllowance,
@@ -1006,13 +1088,13 @@ export class EmployeeRepository {
         [
           employeeCode,
           input.firstName,
-          input.lastName,
+          input.lastName?.trim() ?? '',
           input.email?.trim().toLowerCase() || null,
           input.phone,
           input.alternatePhone ?? null,
-          input.dateOfBirth,
+          formatDate(input.dateOfBirth) || input.dateOfBirth,
           input.gender,
-          input.joiningDate,
+          formatDate(input.joiningDate) || input.joiningDate,
           input.employmentType ?? 1,
           EmployeeLifecycleStatus.Active,
           departmentId,
@@ -1058,7 +1140,7 @@ export class EmployeeRepository {
         employeeId,
         'created',
         'Employee created',
-        `${input.firstName} ${input.lastName} onboarded`,
+        `${formatPersonName(input.firstName, input.lastName)} onboarded`,
         input.createdBy,
       );
 
@@ -1193,7 +1275,7 @@ export class EmployeeRepository {
       const r = rows[0];
       if (!r) throw new Error('NOT_FOUND');
 
-      if (!r.first_name || !r.last_name || !r.phone || !r.date_of_birth || !r.joining_date) {
+      if (!r.first_name || !r.phone || !r.date_of_birth || !r.joining_date) {
         throw new Error('INCOMPLETE');
       }
 
@@ -1214,7 +1296,7 @@ export class EmployeeRepository {
         id: employeeId,
         employeeCode: String(r.employee_code),
         status: EmployeeLifecycleStatus.Active,
-        fullName: `${r.first_name} ${r.last_name}`.trim(),
+        fullName: formatPersonName(String(r.first_name ?? ''), String(r.last_name ?? '')),
       };
     });
   }
@@ -1739,7 +1821,11 @@ export class EmployeeRepository {
     return result;
   }
 
-  async exportEmployees(format: 'excel' | 'pdf' = 'excel'): Promise<Buffer> {
+  async exportEmployees(
+    format: 'excel' | 'pdf' = 'excel',
+    columns?: string[] | null,
+  ): Promise<Buffer> {
+    const selected = resolveEmployeeExportColumns(columns);
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.employee_code,
               COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
@@ -1747,6 +1833,10 @@ export class EmployeeRepository {
               COALESCE(pd.last_name, e.last_name) AS last_name,
               pd.father_name,
               e.email, e.phone, e.status,
+              COALESCE(esd.uan_number, e.uan_number) AS uan_number,
+              COALESCE(esd.esi_number, e.esi_number) AS esi_number,
+              e.aadhaar_number,
+              bd.bank_name, bd.account_number, bd.ifsc_code, bd.account_holder_name,
               d.name AS department, des.name AS designation, s.site_name AS site,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
               COALESCE(ed.basic_salary, e.basic_salary) AS basic_salary,
@@ -1757,38 +1847,55 @@ export class EmployeeRepository {
        INNER JOIN departments d ON d.id = COALESCE(ed.department_id, e.department_id)
        INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
+       LEFT JOIN employee_bank_details bd ON bd.employee_id = e.id
+       LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
        WHERE NOT e.is_deleted
        ORDER BY e.employee_code`,
     );
 
-    const dataRows: Array<Array<string | number | null | undefined>> = rows.map((r) => [
-      String(r.employee_code ?? ''),
-      r.client_soft_code == null ? '' : String(r.client_soft_code),
-      String(r.first_name ?? ''),
-      String(r.last_name ?? ''),
-      r.father_name == null ? '' : String(r.father_name),
-      String(r.email ?? ''),
-      String(r.phone ?? ''),
-      r.status == null ? '' : Number(r.status),
-      String(r.department ?? ''),
-      String(r.designation ?? ''),
-      r.site == null ? '' : String(r.site),
-      formatDate(String(r.joining_date)),
-      r.basic_salary == null ? '' : Number(r.basic_salary),
-      r.gross_salary == null ? '' : Number(r.gross_salary),
-    ]);
+    const valueFor = (r: Record<string, unknown>, key: string): string | number | null => {
+      switch (key) {
+        case 'employeeCode': return String(r.employee_code ?? '');
+        case 'softCode': return r.client_soft_code == null ? '' : String(r.client_soft_code);
+        case 'firstName': return String(r.first_name ?? '');
+        case 'lastName': return String(r.last_name ?? '');
+        case 'fatherName': return r.father_name == null ? '' : String(r.father_name);
+        case 'email': return String(r.email ?? '');
+        case 'phone': return String(r.phone ?? '');
+        case 'uanNumber': return r.uan_number == null ? '' : String(r.uan_number);
+        case 'esiNumber': return r.esi_number == null ? '' : String(r.esi_number);
+        case 'aadhaarNumber': return r.aadhaar_number == null ? '' : String(r.aadhaar_number);
+        case 'bankName': return r.bank_name == null ? '' : String(r.bank_name);
+        case 'accountNumber': return r.account_number == null ? '' : String(r.account_number);
+        case 'ifscCode': return r.ifsc_code == null ? '' : String(r.ifsc_code);
+        case 'accountHolderName': return r.account_holder_name == null ? '' : String(r.account_holder_name);
+        case 'status': return r.status == null ? '' : Number(r.status);
+        case 'department': return String(r.department ?? '');
+        case 'designation': return String(r.designation ?? '');
+        case 'site': return r.site == null ? '' : String(r.site);
+        case 'joiningDate': return formatDate(String(r.joining_date));
+        case 'basicSalary': return r.basic_salary == null ? '' : Number(r.basic_salary);
+        case 'grossSalary': return r.gross_salary == null ? '' : Number(r.gross_salary);
+        default: return '';
+      }
+    };
+
+    const dataRows: Array<Array<string | number | null | undefined>> = rows.map((r) =>
+      selected.map((column) => valueFor(r, column.key)),
+    );
+    const headers = selected.map((column) => column.key);
 
     if (format === 'pdf') {
       return buildPdfTableBuffer({
         title: 'Employees',
-        headers: [...BULK_EXPORT_HEADERS],
+        headers,
         rows: dataRows,
         landscape: true,
         omitHeaders: [...EMPLOYEE_PDF_OMIT_HEADERS],
       });
     }
 
-    return buildExcelBuffer('Employees', [...BULK_EXPORT_HEADERS], dataRows);
+    return buildExcelBuffer('Employees', headers, dataRows);
   }
 
   documentExistsOnDisk(filePath: string): boolean {

@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { formatDate, formatDateTime, roundOff, toNumber } from '../../utils/formatters';
 import { buildExcelBuffer } from '../../utils/excel-export';
+import { applyExportColumnSelection } from '../../utils/export-columns';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
 import { NotFoundError } from '../../common/errors';
 import {
@@ -56,18 +57,18 @@ export interface InsertAdvanceEntry {
   payableAmount: number | null;
 }
 
-const EXPORT_HEADERS = [
-  'Soft Code',
-  'Employee Code',
-  'Employee Name',
-  'Father Name',
-  'Designation',
-  'Payment Date',
-  'Payment Amount',
-  'Payment Notes',
-  'Total Advance',
-  'Salary Net Pay',
-  'Payable (Net − Advance)',
+export const EMPLOYEE_ADVANCE_EXPORT_COLUMNS = [
+  { key: 'softCode', label: 'Soft Code' },
+  { key: 'employeeCode', label: 'Employee Code' },
+  { key: 'employeeName', label: 'Employee Name' },
+  { key: 'fatherName', label: 'Father Name' },
+  { key: 'designation', label: 'Designation' },
+  { key: 'paymentDate', label: 'Payment Date' },
+  { key: 'paymentAmount', label: 'Payment Amount' },
+  { key: 'paymentNotes', label: 'Payment Notes' },
+  { key: 'totalAdvance', label: 'Total Advance' },
+  { key: 'salaryNetPay', label: 'Salary Net Pay' },
+  { key: 'payableAmount', label: 'Payable (Net − Advance)' },
 ] as const;
 
 const ADVANCE_PDF_OMIT_HEADERS = ['Payment Notes'] as const;
@@ -696,30 +697,37 @@ export class EmployeeAdvancesRepository {
     );
   }
 
-  async exportExcel(id: string): Promise<Buffer> {
+  async exportExcel(id: string, columns?: string[]): Promise<Buffer> {
     const detail = await this.findById(id);
     if (!detail) throw new NotFoundError('Employee advance register', id);
-    return buildExcelBuffer(
-      'Employee Advances',
-      [...EXPORT_HEADERS],
+    const selected = applyExportColumnSelection(
+      EMPLOYEE_ADVANCE_EXPORT_COLUMNS,
+      columns,
       this.buildExportDataRows(detail),
     );
+    return buildExcelBuffer('Employee Advances', selected.headers, selected.rows);
   }
 
-  async exportPdf(id: string): Promise<Buffer> {
+  async exportPdf(id: string, columns?: string[]): Promise<Buffer> {
     const detail = await this.findById(id);
     if (!detail) throw new NotFoundError('Employee advance register', id);
     const period = `${String(detail.month).padStart(2, '0')}/${detail.year}`;
     const clientPart = detail.clientCode
       ? `${detail.clientName} (${detail.clientCode})`
       : detail.clientName;
+    const selected = applyExportColumnSelection(
+      EMPLOYEE_ADVANCE_EXPORT_COLUMNS,
+      columns,
+      this.buildExportDataRows(detail),
+      ADVANCE_PDF_OMIT_HEADERS,
+    );
     return buildPdfTableBuffer({
       title: 'Employee Advances',
       subtitle: `${clientPart} · ${period}`,
-      headers: [...EXPORT_HEADERS],
-      rows: this.buildExportDataRows(detail),
+      headers: selected.headers,
+      rows: selected.rows,
       landscape: true,
-      omitHeaders: [...ADVANCE_PDF_OMIT_HEADERS],
+      omitHeaders: selected.omitHeaders,
     });
   }
 

@@ -8,6 +8,7 @@ import {
 } from '../../types';
 import { formatDateTime, toNumber } from '../../utils/formatters';
 import { buildExcelBuffer } from '../../utils/excel-export';
+import { applyExportColumnSelection } from '../../utils/export-columns';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
 import { NotFoundError } from '../../common/errors';
 import {
@@ -107,38 +108,38 @@ export interface InsertSalaryEmployeeRow {
   rowStatus: 'calculated' | 'adjusted' | 'excluded';
 }
 
-const EXPORT_HEADERS = [
-  'Soft Code',
-  'Employee Code',
-  'Employee Name',
-  'Father Name',
-  'Designation',
-  'Month Days',
-  'Pay Days',
-  'OT Hours',
-  'Basic',
-  'HRA',
-  'Fixed Total',
-  'Earning Basic',
-  'Earning HRA',
-  'OT Amount',
-  'N.ALL',
-  'Gross Earnings',
-  'ATT/AW AFD',
-  'Gross Total',
-  'ESIC',
-  'EPF',
-  'LWF',
-  'T.DED',
-  'NET.PAY',
-  'Aadhaar',
-  'A/C No',
-  'UAN',
-  'ESI No',
-  'PF Eligible',
-  'ESI Eligible',
-  'LWF Eligible',
-  'Validation',
+export const SALARY_REGISTER_EXPORT_COLUMNS = [
+  { key: 'softCode', label: 'Soft Code' },
+  { key: 'employeeCode', label: 'Employee Code' },
+  { key: 'employeeName', label: 'Employee Name' },
+  { key: 'fatherName', label: 'Father Name' },
+  { key: 'designation', label: 'Designation' },
+  { key: 'monthDays', label: 'Month Days' },
+  { key: 'payDays', label: 'Pay Days' },
+  { key: 'otHours', label: 'OT Hours' },
+  { key: 'basic', label: 'Basic' },
+  { key: 'hra', label: 'HRA' },
+  { key: 'fixedTotal', label: 'Fixed Total' },
+  { key: 'earningBasic', label: 'Earning Basic' },
+  { key: 'earningHra', label: 'Earning HRA' },
+  { key: 'otAmount', label: 'OT Amount' },
+  { key: 'nAll', label: 'N.ALL' },
+  { key: 'grossEarnings', label: 'Gross Earnings' },
+  { key: 'attAwAfd', label: 'ATT/AW AFD' },
+  { key: 'grossTotal', label: 'Gross Total' },
+  { key: 'esic', label: 'ESIC' },
+  { key: 'epf', label: 'EPF' },
+  { key: 'lwf', label: 'LWF' },
+  { key: 'tDed', label: 'T.DED' },
+  { key: 'netPay', label: 'NET.PAY' },
+  { key: 'aadhaar', label: 'Aadhaar' },
+  { key: 'accountNumber', label: 'A/C No' },
+  { key: 'uan', label: 'UAN' },
+  { key: 'esiNo', label: 'ESI No' },
+  { key: 'pfEligible', label: 'PF Eligible' },
+  { key: 'esiEligible', label: 'ESI Eligible' },
+  { key: 'lwfEligible', label: 'LWF Eligible' },
+  { key: 'validation', label: 'Validation' },
 ] as const;
 
 const SALARY_PDF_OMIT_HEADERS = [
@@ -695,26 +696,37 @@ export class SalaryRegisterRepository {
     ]);
   }
 
-  async exportExcel(id: string): Promise<Buffer> {
+  async exportExcel(id: string, columns?: string[]): Promise<Buffer> {
     const detail = await this.findById(id);
     if (!detail) throw new NotFoundError('Salary register', id);
-    return buildExcelBuffer('Salary Register', [...EXPORT_HEADERS], this.buildExportDataRows(detail));
+    const selected = applyExportColumnSelection(
+      SALARY_REGISTER_EXPORT_COLUMNS,
+      columns,
+      this.buildExportDataRows(detail),
+    );
+    return buildExcelBuffer('Salary Register', selected.headers, selected.rows);
   }
 
-  async exportPdf(id: string): Promise<Buffer> {
+  async exportPdf(id: string, columns?: string[]): Promise<Buffer> {
     const detail = await this.findById(id);
     if (!detail) throw new NotFoundError('Salary register', id);
     const period = `${String(detail.month).padStart(2, '0')}/${detail.year}`;
     const clientPart = detail.clientCode
       ? `${detail.clientName} (${detail.clientCode})`
       : detail.clientName;
+    const selected = applyExportColumnSelection(
+      SALARY_REGISTER_EXPORT_COLUMNS,
+      columns,
+      this.buildExportDataRows(detail),
+      SALARY_PDF_OMIT_HEADERS,
+    );
     return buildPdfTableBuffer({
       title: 'Salary Register',
       subtitle: `${clientPart} · ${period}`,
-      headers: [...EXPORT_HEADERS],
-      rows: this.buildExportDataRows(detail),
+      headers: selected.headers,
+      rows: selected.rows,
       landscape: true,
-      omitHeaders: [...SALARY_PDF_OMIT_HEADERS],
+      omitHeaders: selected.omitHeaders,
     });
   }
 

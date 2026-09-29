@@ -1,6 +1,7 @@
 import { query } from '../../database/pool';
 import {
   CursorPaginatedResult,
+  CursorSortField,
   parseCursorPaginationQuery,
   runCursorList,
 } from '../../types';
@@ -10,7 +11,7 @@ import {
   PayslipListItem,
   PayslipPrintData,
 } from './payslip.types';
-import { monthName, toNumber, formatDate, daysInMonth } from '../../utils/formatters';
+import { monthName, toNumber, formatDate, daysInMonth, formatPersonName } from '../../utils/formatters';
 import { NotFoundError } from '../../common/errors';
 import { companyRepository } from '../company/company.repository';
 import { CompanyProfile } from '../company/company.types';
@@ -177,6 +178,7 @@ export class PayslipRepository {
               e.employee_code, e.first_name, e.last_name,
               pd.father_name,
               COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
+              LOWER(COALESCE(NULLIF(TRIM(COALESCE(ed.client_soft_code, e.client_soft_code)), ''), e.employee_code)) AS soft_code_sort,
               d.name AS department_name, des.name AS designation_name
        FROM salary_slips ss
        INNER JOIN employees e ON e.id = ss.employee_id
@@ -185,12 +187,7 @@ export class PayslipRepository {
        LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)`,
-      sortFields: [
-        { column: 'ss.year', key: 'year', direction: 'DESC' },
-        { column: 'ss.month', key: 'month', direction: 'DESC' },
-        { column: 'e.employee_code', key: 'employeeCode', direction: 'ASC' },
-        { column: 'ss.id', key: 'id', direction: 'DESC' },
-      ],
+      sortFields: this.buildSortFields(filter.sortBy, filter.sortDir),
       mapRow: (r) => this.mapListItem(r),
     });
   }
@@ -305,6 +302,33 @@ export class PayslipRepository {
     if (!rowCount) throw new NotFoundError('Salary slip', id);
   }
 
+  private buildSortFields(sortBy?: string, sortDir?: string): CursorSortField[] {
+    const direction: 'ASC' | 'DESC' = sortDir === 'desc' ? 'DESC' : 'ASC';
+    const normalized = (sortBy ?? '').trim().toLowerCase();
+    if (normalized === 'code' || normalized === 'employeecode') {
+      return [
+        { column: 'e.employee_code', key: 'employeeCode', direction },
+        { column: 'ss.id', key: 'id', direction: 'ASC' },
+      ];
+    }
+    if (normalized === 'softcode' || normalized === 'clientsoftcode') {
+      return [
+        {
+          column: `LOWER(COALESCE(NULLIF(TRIM(COALESCE(ed.client_soft_code, e.client_soft_code)), ''), e.employee_code))`,
+          key: 'softCodeSort',
+          direction,
+        },
+        { column: 'ss.id', key: 'id', direction: 'ASC' },
+      ];
+    }
+    return [
+      { column: 'ss.year', key: 'year', direction: 'DESC' },
+      { column: 'ss.month', key: 'month', direction: 'DESC' },
+      { column: 'e.employee_code', key: 'employeeCode', direction: 'ASC' },
+      { column: 'ss.id', key: 'id', direction: 'DESC' },
+    ];
+  }
+
   private mapListItem(r: Record<string, unknown>): PayslipListItem {
     const month = Number(r.month);
     const year = Number(r.year);
@@ -314,7 +338,7 @@ export class PayslipRepository {
       employeeId: String(r.employee_id),
       employeeCode: String(r.employee_code),
       softCode: r.client_soft_code ? String(r.client_soft_code) : null,
-      employeeName: `${r.first_name} ${r.last_name}`,
+      employeeName: formatPersonName(String(r.first_name ?? ''), String(r.last_name ?? '')),
       fatherName: r.father_name ? String(r.father_name) : null,
       department: String(r.department_name),
       designation: String(r.designation_name),

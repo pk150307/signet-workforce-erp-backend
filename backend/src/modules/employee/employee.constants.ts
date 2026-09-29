@@ -1,3 +1,5 @@
+import { resolveExportColumns } from '../../utils/export-columns';
+
 /** Employee lifecycle statuses — aligned with Angular frontend */
 export enum EmployeeLifecycleStatus {
   Draft = 0,
@@ -96,21 +98,38 @@ export const BULK_IMPORT_HEADERS = [
   'grossSalary',
 ] as const;
 
-export const BULK_EXPORT_HEADERS = [
-  'employeeCode',
-  'softCode',
-  'firstName',
-  'lastName',
-  'fatherName',
-  'email',
-  'phone',
-  'status',
-  'department',
-  'designation',
-  'site',
-  'joiningDate',
-  'basicSalary',
-  'grossSalary',
+export const EMPLOYEE_EXPORT_COLUMN_DEFS = [
+  { key: 'employeeCode', label: 'Employee Code' },
+  { key: 'softCode', label: 'Soft Code' },
+  { key: 'firstName', label: 'First Name' },
+  { key: 'lastName', label: 'Last Name' },
+  { key: 'fatherName', label: 'Father Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Mobile' },
+  { key: 'uanNumber', label: 'UAN' },
+  { key: 'esiNumber', label: 'ESI' },
+  { key: 'aadhaarNumber', label: 'Aadhaar' },
+  { key: 'bankName', label: 'Bank Name' },
+  { key: 'accountNumber', label: 'Bank Account' },
+  { key: 'ifscCode', label: 'IFSC' },
+  { key: 'accountHolderName', label: 'Account Holder' },
+  { key: 'status', label: 'Status' },
+  { key: 'department', label: 'Department' },
+  { key: 'designation', label: 'Designation' },
+  { key: 'site', label: 'Site' },
+  { key: 'joiningDate', label: 'Joining Date' },
+  { key: 'basicSalary', label: 'Basic Salary' },
+  { key: 'grossSalary', label: 'Gross Salary' },
 ] as const;
+
+export type EmployeeExportColumnKey = (typeof EMPLOYEE_EXPORT_COLUMN_DEFS)[number]['key'];
+
+export const BULK_EXPORT_HEADERS = EMPLOYEE_EXPORT_COLUMN_DEFS.map((column) => column.key);
+
+export function resolveEmployeeExportColumns(
+  requested?: string[] | null,
+): Array<{ key: EmployeeExportColumnKey; label: string }> {
+  return resolveExportColumns(EMPLOYEE_EXPORT_COLUMN_DEFS, requested);
+}
 
 export const EMPLOYEE_PDF_OMIT_HEADERS = ['status'] as const;

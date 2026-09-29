@@ -104,8 +104,17 @@ export class AttendanceService {
     year: number,
     user: string,
     format: 'excel' | 'pdf' = 'excel',
+    columns?: string[],
   ) {
-    return attendanceRepository.buildRegisterWorkbook(clientId, month, year, user, true, format);
+    return attendanceRepository.buildRegisterWorkbook(
+      clientId,
+      month,
+      year,
+      user,
+      true,
+      format,
+      columns,
+    );
   }
 
   lockRegister(input: LockRegisterInput, user: string) {

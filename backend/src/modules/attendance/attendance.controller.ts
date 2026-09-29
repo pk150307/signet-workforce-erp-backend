@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { attendanceService } from './attendance.service';
 import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { parseExportColumnQuery } from '../../utils/export-columns';
 import { parseCursorPaginationQuery } from '../../types';
 
 function periodFromQuery(req: Request) {
@@ -26,6 +27,8 @@ export class AttendanceController {
     const result = await attendanceService.getEmployeeList({
       ...periodFromQuery(req),
       ...pagination,
+      sortBy: req.query.sortBy as string | undefined,
+      sortDir: req.query.sortDir === 'desc' ? 'desc' : req.query.sortDir === 'asc' ? 'asc' : undefined,
     });
     sendSuccess(res, result);
   }
@@ -112,12 +115,14 @@ export class AttendanceController {
   async exportRegister(req: Request, res: Response) {
     const p = periodFromQuery(req);
     const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
+    const columns = parseExportColumnQuery(req.query.columns);
     const buffer = await attendanceService.exportRegister(
       p.clientId,
       p.month,
       p.year,
       actor(req),
       format,
+      columns,
     );
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');

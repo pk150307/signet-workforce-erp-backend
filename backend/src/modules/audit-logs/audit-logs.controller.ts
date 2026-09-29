@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { parseExportColumnQuery } from '../../utils/export-columns';
 import { auditLogsService } from './audit-logs.service';
 import { AuditLogFilter } from './audit-logs.types';
 import { parseCursorPaginationQuery } from '../../types';
@@ -44,7 +45,8 @@ export class AuditLogsController {
 
   async export(req: Request, res: Response): Promise<void> {
     const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
-    const buffer = await auditLogsService.export(parseFilter(req), format);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await auditLogsService.export(parseFilter(req), format, columns);
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="audit-logs-export.pdf"');

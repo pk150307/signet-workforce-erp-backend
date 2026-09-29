@@ -103,6 +103,8 @@ export interface PayslipFilter {
   departmentId?: string;
   search?: string;
   status?: string;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
 }
 
 export interface UpdatePayslipStatusInput {

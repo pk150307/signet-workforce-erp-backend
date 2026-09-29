@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { applyReadablePrintLayout } from '../../utils/excel-export';
+import { applyExportColumnSelection } from '../../utils/export-columns';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
 
 export const EMP_ID_HEADER = 'Emp ID';
@@ -12,16 +13,16 @@ export const NIGHT_ALLOWANCE_HEADER = 'Night Allowance';
 export const PUNCTUALITY_AWARD_HEADER = 'Punctuality Award';
 export const BONUS_HEADER = 'Bonus';
 
-const MONTHLY_EXPORT_HEADERS = [
-  EMP_ID_HEADER,
-  EMP_NAME_HEADER,
-  SOFT_CODE_HEADER,
-  FATHER_NAME_HEADER,
-  PRESENT_DAYS_HEADER,
-  OT_HOURS_HEADER,
-  NIGHT_ALLOWANCE_HEADER,
-  PUNCTUALITY_AWARD_HEADER,
-  BONUS_HEADER,
+export const ATTENDANCE_EXPORT_COLUMNS = [
+  { key: 'employeeCode', label: EMP_ID_HEADER },
+  { key: 'employeeName', label: EMP_NAME_HEADER },
+  { key: 'softCode', label: SOFT_CODE_HEADER },
+  { key: 'fatherName', label: FATHER_NAME_HEADER },
+  { key: 'presentDays', label: PRESENT_DAYS_HEADER },
+  { key: 'overtimeHours', label: OT_HOURS_HEADER },
+  { key: 'nightAllowance', label: NIGHT_ALLOWANCE_HEADER },
+  { key: 'punctualityAward', label: PUNCTUALITY_AWARD_HEADER },
+  { key: 'bonus', label: BONUS_HEADER },
 ] as const;
 
 type TailColumnType = 'present' | 'ot' | 'night' | 'punctuality' | 'bonus';
@@ -185,31 +186,40 @@ export interface MonthlyExportEmployee {
 
 export async function buildMonthlyWorkbook(
   employees: MonthlyExportEmployee[],
+  columns?: string[],
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Signet Workforce ERP';
   const sheet = workbook.addWorksheet('Attendance');
 
-  const headers = [...MONTHLY_EXPORT_HEADERS];
+  const selected = applyExportColumnSelection(
+    ATTENDANCE_EXPORT_COLUMNS,
+    columns,
+    employees.map(monthlyExportRow),
+  );
+  const headers = selected.headers;
   const headerRow = sheet.addRow(headers);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1565C0' } };
   headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  for (const emp of employees) {
-    sheet.addRow(monthlyExportRow(emp));
+  for (const row of selected.rows) {
+    sheet.addRow(row);
   }
 
-  sheet.getColumn(1).width = 14;
-  sheet.getColumn(2).width = 22;
-  sheet.getColumn(3).width = 14;
-  sheet.getColumn(4).width = 22;
-  for (let i = 5; i <= 9; i++) {
-    sheet.getColumn(i).width = 16;
-    sheet.getColumn(i).alignment = { horizontal: 'center' };
-  }
+  headers.forEach((header, index) => {
+    const col = sheet.getColumn(index + 1);
+    if (header === EMP_NAME_HEADER || header === FATHER_NAME_HEADER) {
+      col.width = 22;
+    } else if (index >= 4) {
+      col.width = 16;
+      col.alignment = { horizontal: 'center' };
+    } else {
+      col.width = 14;
+    }
+  });
 
-  sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: 4 }];
+  sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: Math.min(4, headers.length) }];
   applyReadablePrintLayout(sheet);
 
   const buffer = await workbook.xlsx.writeBuffer();
@@ -218,13 +228,18 @@ export async function buildMonthlyWorkbook(
 
 export async function buildMonthlyPdf(
   employees: MonthlyExportEmployee[],
-  options?: { title?: string; subtitle?: string },
+  options?: { title?: string; subtitle?: string; columns?: string[] },
 ): Promise<Buffer> {
+  const selected = applyExportColumnSelection(
+    ATTENDANCE_EXPORT_COLUMNS,
+    options?.columns,
+    employees.map(monthlyExportRow),
+  );
   return buildPdfTableBuffer({
     title: options?.title ?? 'Attendance Register',
     subtitle: options?.subtitle,
-    headers: [...MONTHLY_EXPORT_HEADERS],
-    rows: employees.map(monthlyExportRow),
+    headers: selected.headers,
+    rows: selected.rows,
     landscape: true,
   });
 }

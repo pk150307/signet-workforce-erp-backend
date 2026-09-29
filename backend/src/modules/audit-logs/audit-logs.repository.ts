@@ -6,7 +6,7 @@ import {
   runCursorList,
 } from '../../types';
 import {
-  AUDIT_LOG_EXPORT_HEADERS,
+  AUDIT_LOG_EXPORT_COLUMNS,
   AUDIT_LOG_EXPORT_MAX_ROWS,
   AUDIT_LOG_PDF_OMIT_HEADERS,
   AuditLogDetail,
@@ -15,6 +15,7 @@ import {
   AuditLogSummary,
 } from './audit-logs.types';
 import { buildExcelBuffer } from '../../utils/excel-export';
+import { applyExportColumnSelection } from '../../utils/export-columns';
 import { buildPdfTableBuffer } from '../../utils/pdf-export';
 
 const SELECT_FIELDS = `
@@ -219,6 +220,7 @@ export class AuditLogsRepository {
   async exportCsv(
     filter: AuditLogFilter,
     format: 'excel' | 'pdf' = 'excel',
+    columns?: string[],
   ): Promise<Buffer> {
     const { where, params } = this.buildConditions(filter);
 
@@ -249,17 +251,24 @@ export class AuditLogsRepository {
       ];
     });
 
+    const selected = applyExportColumnSelection(
+      AUDIT_LOG_EXPORT_COLUMNS,
+      columns,
+      dataRows,
+      AUDIT_LOG_PDF_OMIT_HEADERS,
+    );
+
     if (format === 'pdf') {
       return buildPdfTableBuffer({
         title: 'Audit Logs',
-        headers: [...AUDIT_LOG_EXPORT_HEADERS],
-        rows: dataRows,
+        headers: selected.headers,
+        rows: selected.rows,
         landscape: true,
-        omitHeaders: [...AUDIT_LOG_PDF_OMIT_HEADERS],
+        omitHeaders: selected.omitHeaders,
       });
     }
 
-    return buildExcelBuffer('Audit Logs', [...AUDIT_LOG_EXPORT_HEADERS], dataRows);
+    return buildExcelBuffer('Audit Logs', selected.headers, selected.rows);
   }
 }
 

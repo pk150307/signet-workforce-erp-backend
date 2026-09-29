@@ -4,6 +4,7 @@ import { UpsertPfEsicInput } from './statutory.types';
 import { parseStatutoryFilter } from './statutory.utils';
 import { sendSuccess } from '../../common/response';
 import { paramId } from '../../utils/request';
+import { parseExportColumnQuery } from '../../utils/export-columns';
 
 export class StatutoryController {
   async list(req: Request, res: Response): Promise<void> {
@@ -13,7 +14,8 @@ export class StatutoryController {
 
   async export(req: Request, res: Response): Promise<void> {
     const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
-    const buffer = await statutoryService.export(parseStatutoryFilter(req), format);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await statutoryService.export(parseStatutoryFilter(req), format, columns);
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="pf-esic-export.pdf"');

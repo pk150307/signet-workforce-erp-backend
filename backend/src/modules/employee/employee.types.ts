@@ -23,6 +23,13 @@ export interface EmployeeListItem {
   status: EmployeeLifecycleStatus;
   joiningDate: string;
   profilePhotoUrl: string | null;
+  uanNumber: string | null;
+  esiNumber: string | null;
+  aadhaarNumber: string | null;
+  bankName: string | null;
+  accountNumber: string | null;
+  ifscCode: string | null;
+  accountHolderName: string | null;
 }
 
 export interface EmployeeDetail {
@@ -241,7 +248,7 @@ export interface SaveEmployeeDraftInput {
 
 export interface CreateEmployeeInput extends SaveEmployeeDraftInput {
   firstName: string;
-  lastName: string;
+  lastName?: string;
   email?: string;
   phone: string;
   dateOfBirth: string;
@@ -286,7 +293,7 @@ export interface RejoinEmployeeInput {
 
 export interface BulkImportRow {
   firstName: string;
-  lastName: string;
+  lastName?: string;
   email: string;
   phone: string;
   dateOfBirth: string;

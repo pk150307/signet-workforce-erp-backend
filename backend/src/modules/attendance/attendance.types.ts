@@ -45,6 +45,8 @@ export interface RegisterFilter {
   pageSize?: number;
   cursor?: string | null;
   direction?: 'next' | 'prev';
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
 }
 
 export interface AttendanceRegisterMeta {

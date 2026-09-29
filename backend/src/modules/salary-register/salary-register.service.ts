@@ -552,12 +552,12 @@ export class SalaryRegisterService {
     return this.getById(id);
   }
 
-  async exportExcel(id: string): Promise<Buffer> {
-    return salaryRegisterRepository.exportExcel(id);
+  async exportExcel(id: string, columns?: string[]): Promise<Buffer> {
+    return salaryRegisterRepository.exportExcel(id, columns);
   }
 
-  async exportPdf(id: string): Promise<Buffer> {
-    return salaryRegisterRepository.exportPdf(id);
+  async exportPdf(id: string, columns?: string[]): Promise<Buffer> {
+    return salaryRegisterRepository.exportPdf(id, columns);
   }
 }
 

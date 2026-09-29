@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sendCreated, sendSuccess } from '../../common/response';
 import { parsePageSize } from '../../types';
 import { paramId } from '../../utils/request';
+import { parseExportColumnQuery } from '../../utils/export-columns';
 import { salaryRegisterService } from './salary-register.service';
 import { SalaryRegisterFilter, SalaryRegisterStatus } from './salary-register.types';
 
@@ -75,7 +76,8 @@ export class SalaryRegisterController {
 
   async exportExcel(req: Request, res: Response): Promise<void> {
     const id = paramId(req);
-    const buffer = await salaryRegisterService.exportExcel(id);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await salaryRegisterService.exportExcel(id, columns);
     const detail = await salaryRegisterService.getById(id);
     const filename = `salary-register-${detail.clientCode || detail.clientId}-${detail.year}-${String(detail.month).padStart(2, '0')}.xlsx`;
     res.setHeader(
@@ -88,7 +90,8 @@ export class SalaryRegisterController {
 
   async exportPdf(req: Request, res: Response): Promise<void> {
     const id = paramId(req);
-    const buffer = await salaryRegisterService.exportPdf(id);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await salaryRegisterService.exportPdf(id, columns);
     const detail = await salaryRegisterService.getById(id);
     const filename = `salary-register-${detail.clientCode || detail.clientId}-${detail.year}-${String(detail.month).padStart(2, '0')}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');

@@ -33,6 +33,24 @@ export class EmployeeService {
       designationGradeId: input.designationGradeId,
     });
   }
+
+  private async assertUniqueClientSoftCode(
+    input: SaveEmployeeDraftInput,
+    excludeEmployeeId?: string,
+  ): Promise<void> {
+    const softCode = input.clientSoftCode?.trim();
+    if (!softCode) return;
+
+    let clientId = input.clientId;
+    if (!clientId && input.siteId) {
+      clientId = (await siteRepository.getClientIdForSite(input.siteId)) ?? undefined;
+    }
+    if (!clientId) return;
+
+    if (await employeeRepository.clientSoftCodeExists(softCode, clientId, excludeEmployeeId)) {
+      throw new AppError(409, 'Softcode is already taken for this client');
+    }
+  }
   getAll(filter: EmployeeFilter) {
     return employeeRepository.findAll(filter);
   }
@@ -66,6 +84,7 @@ export class EmployeeService {
     }
     await this.validateClientSite(input.clientId, input.siteId);
     await this.validateEmployeeOrg(input);
+    await this.assertUniqueClientSoftCode(input);
     return employeeRepository.create({ ...input, email: email || undefined });
   }
 
@@ -76,6 +95,7 @@ export class EmployeeService {
     }
     await this.validateClientSite(input.clientId, input.siteId);
     await this.validateEmployeeOrg(input);
+    await this.assertUniqueClientSoftCode(input, input.id);
 
     try {
       return await employeeRepository.saveDraft(
@@ -117,6 +137,7 @@ export class EmployeeService {
     }
     await this.validateClientSite(input.clientId, input.siteId);
     await this.validateEmployeeOrg(input);
+    await this.assertUniqueClientSoftCode(input, input.id);
 
     try {
       await employeeRepository.update({ ...input, email: email || undefined });
@@ -233,8 +254,8 @@ export class EmployeeService {
     return employeeRepository.bulkImport(rows, createdBy);
   }
 
-  exportEmployees(format: 'excel' | 'pdf' = 'excel') {
-    return employeeRepository.exportEmployees(format);
+  exportEmployees(format: 'excel' | 'pdf' = 'excel', columns?: string[] | null) {
+    return employeeRepository.exportEmployees(format, columns);
   }
 }
 

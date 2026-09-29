@@ -28,6 +28,8 @@ export class PayslipController {
       departmentId: req.query.departmentId as string | undefined,
       search: req.query.search as string | undefined,
       status: req.query.status as string | undefined,
+      sortBy: req.query.sortBy as string | undefined,
+      sortDir: req.query.sortDir === 'desc' ? 'desc' : req.query.sortDir === 'asc' ? 'asc' : undefined,
     });
     sendSuccess(res, result);
   }

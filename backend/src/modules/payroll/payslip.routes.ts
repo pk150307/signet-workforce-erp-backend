@@ -22,6 +22,8 @@ router.get(
     query('departmentId').optional().isUUID(),
     query('search').optional().isString(),
     query('status').optional().isString(),
+    query('sortBy').optional().isString(),
+    query('sortDir').optional().isIn(['asc', 'desc']),
   ]),
   (req, res, next) => {
     payslipController.list(req, res).catch(next);

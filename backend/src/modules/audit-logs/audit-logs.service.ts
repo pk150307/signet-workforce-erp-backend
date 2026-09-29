@@ -17,8 +17,8 @@ export class AuditLogsService {
     return auditLogsRepository.getSummary(filter);
   }
 
-  export(filter: AuditLogFilter, format: 'excel' | 'pdf' = 'excel') {
-    return auditLogsRepository.exportCsv(filter, format);
+  export(filter: AuditLogFilter, format: 'excel' | 'pdf' = 'excel', columns?: string[]) {
+    return auditLogsRepository.exportCsv(filter, format, columns);
   }
 }
 

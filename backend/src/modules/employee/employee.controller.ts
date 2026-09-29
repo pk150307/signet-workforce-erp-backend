@@ -3,6 +3,7 @@ import { employeeService } from './employee.service';
 import { sendCreated, sendNoContent, sendSuccess } from '../../common/response';
 import { AppError, NotFoundError } from '../../common/errors';
 import { paramId } from '../../utils/request';
+import { parseExportColumnQuery } from '../../utils/export-columns';
 import {
   EmployeeLifecycleStatus,
   EmploymentType,
@@ -232,7 +233,8 @@ export class EmployeeController {
 
   async exportEmployees(req: Request, res: Response): Promise<void> {
     const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
-    const buffer = await employeeService.exportEmployees(format);
+    const columns = parseExportColumnQuery(req.query.columns);
+    const buffer = await employeeService.exportEmployees(format, columns);
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="employees-export.pdf"');

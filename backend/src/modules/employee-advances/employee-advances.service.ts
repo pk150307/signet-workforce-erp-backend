@@ -402,12 +402,12 @@ export class EmployeeAdvancesService {
     return this.getById(id);
   }
 
-  async exportExcel(id: string): Promise<Buffer> {
-    return employeeAdvancesRepository.exportExcel(id);
+  async exportExcel(id: string, columns?: string[]): Promise<Buffer> {
+    return employeeAdvancesRepository.exportExcel(id, columns);
   }
 
-  async exportPdf(id: string): Promise<Buffer> {
-    return employeeAdvancesRepository.exportPdf(id);
+  async exportPdf(id: string, columns?: string[]): Promise<Buffer> {
+    return employeeAdvancesRepository.exportPdf(id, columns);
   }
 
   private async requireEditable(registerId: string) {
