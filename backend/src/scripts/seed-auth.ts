@@ -15,7 +15,7 @@ export const DEFAULT_ADMIN = {
 export const DEFAULT_HR_MANAGER = {
   username: 'contact',
   email: 'contact@signetcorporateservices.com',
-  password: 'hrSignet@123',
+  password: 'contactSignet@123',
   firstName: 'HR',
   lastName: 'Manager',
   fullName: 'HR Manager',

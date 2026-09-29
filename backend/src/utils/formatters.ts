@@ -11,11 +11,30 @@ export function formatInterval(value: string | null | undefined): string | null 
   return value;
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** Calendar date from a JS Date without UTC day-shift (IST midnight → previous UTC day). */
+function calendarDateFromDate(value: Date): string {
+  const utcMidnight =
+    value.getUTCHours() === 0 &&
+    value.getUTCMinutes() === 0 &&
+    value.getUTCSeconds() === 0 &&
+    value.getUTCMilliseconds() === 0;
+
+  if (utcMidnight) {
+    return `${value.getUTCFullYear()}-${pad2(value.getUTCMonth() + 1)}-${pad2(value.getUTCDate())}`;
+  }
+
+  return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}`;
+}
+
 export function formatDate(value: Date | string | null | undefined): string | null {
   if (value == null || value === '') return null;
 
   if (value instanceof Date) {
-    return isNaN(value.getTime()) ? null : value.toISOString().split('T')[0];
+    return isNaN(value.getTime()) ? null : calendarDateFromDate(value);
   }
 
   const trimmed = String(value).trim();
@@ -26,10 +45,21 @@ export function formatDate(value: Date | string | null | undefined): string | nu
 
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().split('T')[0];
+    return calendarDateFromDate(parsed);
   }
 
   return null;
+}
+
+/** First name only when last name is blank — never invent a placeholder last name. */
+export function formatPersonName(
+  firstName?: string | null,
+  lastName?: string | null,
+): string {
+  return [firstName, lastName]
+    .map((part) => (part ?? '').trim())
+    .filter(Boolean)
+    .join(' ');
 }
 
 export function formatDateTime(value: Date | string | null | undefined): string | null {

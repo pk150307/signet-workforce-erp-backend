@@ -37,6 +37,27 @@ describe('Employees API', () => {
     expect(res.body.code).toMatch(/^SIG-\d{6}$/);
   });
 
+  it('saves a draft without last name and keeps first name only', async () => {
+    const res = await request(app)
+      .post('/api/employees/draft')
+      .set(authHeader(token))
+      .send({
+        firstName: 'Piyush',
+        lastName: '',
+        phone: '9123456799',
+        draftStep: 1,
+      });
+
+    expect(res.status).toBe(201);
+    const detail = await request(app)
+      .get(`/api/employees/${res.body.id}`)
+      .set(authHeader(token));
+
+    expect(detail.status).toBe(200);
+    expect(detail.body.lastName).toBe('');
+    expect(detail.body.firstName).toBe('Piyush');
+  });
+
   it('saves an employee draft', async () => {
     const res = await request(app)
       .post('/api/employees/draft')
@@ -228,6 +249,45 @@ describe('Employees API', () => {
       });
 
     expect(res.status).toBe(204);
+  });
+
+  it('rejects a duplicate softcode for the same client', async () => {
+    const sitesRes = await request(app)
+      .get(`/api/sites?pageSize=1&clientId=${demoClientId}`)
+      .set(authHeader(token));
+    const siteId = sitesRes.body.items?.[0]?.id as string | undefined;
+    if (!siteId || !demoClientId) return;
+
+    const softCode = `SC-${Date.now()}`;
+    const first = await request(app)
+      .post('/api/employees/draft')
+      .set(authHeader(token))
+      .send({
+        firstName: 'Soft',
+        lastName: 'One',
+        phone: '9123456701',
+        clientId: demoClientId,
+        siteId,
+        clientSoftCode: softCode,
+        draftStep: 2,
+      });
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post('/api/employees/draft')
+      .set(authHeader(token))
+      .send({
+        firstName: 'Soft',
+        lastName: 'Two',
+        phone: '9123456702',
+        clientId: demoClientId,
+        siteId,
+        clientSoftCode: softCode,
+        draftStep: 2,
+      });
+
+    expect(second.status).toBe(409);
+    expect(String(second.body.message)).toMatch(/softcode is already taken for this client/i);
   });
 
   it('marks an employee as left and rejoins', async () => {
