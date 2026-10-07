@@ -1,6 +1,10 @@
 import PDFDocument from 'pdfkit';
 
 export const EXPORT_ROWS_PER_PAGE = 15;
+/** More than this many columns is treated as a wide sheet. */
+export const WIDE_PDF_COLUMN_THRESHOLD = 8;
+/** Data rows per page when the sheet is wide enough to need landscape. */
+export const WIDE_PDF_ROWS_PER_PAGE = 8;
 
 export interface PdfTableExportOptions {
   title: string;
@@ -11,6 +15,8 @@ export interface PdfTableExportOptions {
   landscape?: boolean;
   /** Header labels to drop from the PDF only (Excel callers keep the full set). */
   omitHeaders?: string[];
+  /** Data rows drawn on each page. Wide sheets should use 7–8. */
+  rowsPerPage?: number;
 }
 
 const PDF_HEADER_LABELS: Record<string, string> = {
@@ -136,6 +142,7 @@ export async function buildPdfTableBuffer(options: PdfTableExportOptions): Promi
   const omitted = omitExportColumns(options.headers, options.rows, options.omitHeaders);
   const headers = omitted.headers;
   const rows = omitted.rows;
+  const rowsPerPage = Math.max(1, options.rowsPerPage ?? EXPORT_ROWS_PER_PAGE);
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -162,7 +169,7 @@ export async function buildPdfTableBuffer(options: PdfTableExportOptions): Promi
     const tableHeaderHeight = Math.max(20, fontSize + 10);
     const availableForRows =
       pageBottom() - doc.page.margins.top - headerBandHeight - tableHeaderHeight - 6;
-    const rowHeight = Math.max(22, Math.floor(availableForRows / EXPORT_ROWS_PER_PAGE));
+    const rowHeight = Math.max(22, Math.floor(availableForRows / rowsPerPage));
     const colWidths = computeColumnWidths(doc, headers, rows, pageWidth, fontSize);
     const xs = xOffsets(colWidths, doc.page.margins.left);
 
@@ -200,7 +207,7 @@ export async function buildPdfTableBuffer(options: PdfTableExportOptions): Promi
     let rowsOnPage = 0;
 
     for (const row of rows) {
-      if (rowsOnPage >= EXPORT_ROWS_PER_PAGE) {
+      if (rowsOnPage >= rowsPerPage) {
         doc.addPage();
         startPage();
         rowsOnPage = 0;

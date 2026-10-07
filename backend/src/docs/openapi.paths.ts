@@ -265,12 +265,38 @@
  * /api/employees/export:
  *   get:
  *     tags: [Employees]
- *     summary: Export employees as Excel
+ *     summary: Export employees as Excel or PDF using the same filters as the employee list
+ *     parameters:
+ *       - in: query
+ *         name: format
+ *         schema: { type: string, enum: [excel, pdf], default: excel }
+ *       - in: query
+ *         name: columns
+ *         schema: { type: string, description: "Comma-separated export column keys" }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: clientId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: departmentId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: designationId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: siteId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, description: "all, or 0=Draft, 1=Active, 2=Left, 3=Rejoined. Defaults to Active." }
+ *       - in: query
+ *         name: employmentType
+ *         schema: { type: integer }
  *     responses:
  *       200:
- *         description: Excel (.xlsx) file
- *         content:
- *           application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {}
+ *         description: Excel (.xlsx) or PDF file of the filtered employees
  */
 /**
  * @openapi
