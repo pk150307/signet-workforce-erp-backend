@@ -5,6 +5,7 @@ import {
   createEmployeeValidation,
   documentIdValidation,
   employeeIdValidation,
+  exportEmployeesValidation,
   getEmployeesValidation,
   limitValidation,
   markLeftValidation,
@@ -38,7 +39,7 @@ router.get('/generate-code', (req, res, next) => {
   employeeController.generateCode(req, res).catch(next);
 });
 
-router.get('/export', (req, res, next) => {
+router.get('/export', validate(exportEmployeesValidation), (req, res, next) => {
   employeeController.exportEmployees(req, res).catch(next);
 });
 

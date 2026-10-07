@@ -30,6 +30,24 @@ export const getEmployeesValidation = [
   query('sortDir').optional().isIn(['asc', 'desc']),
 ];
 
+export const exportEmployeesValidation = [
+  query('search').optional().isString().trim(),
+  query('departmentId').optional().isString(),
+  query('designationId').optional().isString(),
+  query('siteId').optional().isUUID(),
+  query('clientId').optional().isUUID(),
+  query('status')
+    .optional()
+    .custom((value) => {
+      if (value === 'all') return true;
+      const n = Number(value);
+      return Number.isInteger(n) && lifecycleValues.includes(n);
+    }),
+  query('employmentType').optional().isInt({ min: 1, max: 6 }).toInt(),
+  query('format').optional().isIn(['excel', 'pdf']),
+  query('columns').optional().isString(),
+];
+
 export const limitValidation = [
   query('limit').optional().isInt({ min: 1, max: MAX_PAGE_SIZE }).toInt(),
 ];

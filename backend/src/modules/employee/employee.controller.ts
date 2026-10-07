@@ -234,7 +234,17 @@ export class EmployeeController {
   async exportEmployees(req: Request, res: Response): Promise<void> {
     const format = req.query.format === 'pdf' ? 'pdf' : 'excel';
     const columns = parseExportColumnQuery(req.query.columns);
-    const buffer = await employeeService.exportEmployees(format, columns);
+    const buffer = await employeeService.exportEmployees(format, columns, {
+      search: req.query.search as string | undefined,
+      departmentId: req.query.departmentId as string | undefined,
+      designationId: req.query.designationId as string | undefined,
+      siteId: req.query.siteId as string | undefined,
+      clientId: req.query.clientId as string | undefined,
+      status: parseEmployeeStatusQuery(req.query.status),
+      employmentType: req.query.employmentType
+        ? (Number(req.query.employmentType) as EmploymentType)
+        : undefined,
+    });
     if (format === 'pdf') {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', 'attachment; filename="employees-export.pdf"');

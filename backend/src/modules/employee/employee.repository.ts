@@ -318,6 +318,8 @@ export class EmployeeRepository {
       department: String(r.department_name ?? ''),
       designation: String(r.designation_name ?? ''),
       siteName: r.site_name ? String(r.site_name) : null,
+      clientId: r.client_id ? String(r.client_id) : null,
+      clientName: r.client_company_name ? String(r.client_company_name) : null,
       status: Number(r.status) as EmployeeLifecycleStatus,
       joiningDate: formatDate(String(r.joining_date))!,
       profilePhotoUrl:
@@ -480,12 +482,12 @@ export class EmployeeRepository {
     ec.emergency_contact_name, ec.emergency_contact_relationship, ec.emergency_contact_phone
   `;
 
-  async findAll(filter: EmployeeFilter): Promise<CursorPaginatedResult<EmployeeListItem>> {
-    const pagination = parseCursorPaginationQuery(filter);
-    const conditions = ['NOT e.is_deleted'];
-    const params: unknown[] = [];
-    let paramIndex = 1;
-
+  private applyListFilters(
+    filter: Partial<EmployeeFilter>,
+    conditions: string[],
+    params: unknown[],
+    paramIndex: number,
+  ): number {
     if (filter.search) {
       conditions.push(`(
         LOWER(COALESCE(pd.first_name, e.first_name)) LIKE $${paramIndex} OR
@@ -547,6 +549,15 @@ export class EmployeeRepository {
       paramIndex++;
     }
 
+    return paramIndex;
+  }
+
+  async findAll(filter: EmployeeFilter): Promise<CursorPaginatedResult<EmployeeListItem>> {
+    const pagination = parseCursorPaginationQuery(filter);
+    const conditions = ['NOT e.is_deleted'];
+    const params: unknown[] = [];
+    let paramIndex = this.applyListFilters(filter, conditions, params, 1);
+
     const sortFields = this.buildSortFields(filter.sortBy, filter.sortDir);
     const cursorSql = buildCursorSql(paramIndex, pagination, sortFields);
     if (cursorSql.whereClause) {
@@ -569,13 +580,15 @@ export class EmployeeRepository {
               COALESCE(esd.esi_number, e.esi_number) AS esi_number,
               e.aadhaar_number,
               bd.bank_name, bd.account_number, bd.ifsc_code, bd.account_holder_name,
-              d.name AS department_name, des.name AS designation_name, s.site_name
+              d.name AS department_name, des.name AS designation_name, s.site_name,
+              s.client_id, cl.company_name AS client_company_name
        FROM employees e
        LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
        INNER JOIN departments d ON d.id = COALESCE(ed.department_id, e.department_id)
        INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
+       LEFT JOIN clients cl ON cl.id = s.client_id AND NOT cl.is_deleted
        LEFT JOIN employee_bank_details bd ON bd.employee_id = e.id
        LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
        WHERE ${where}
@@ -687,13 +700,15 @@ export class EmployeeRepository {
               COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
               COALESCE(pd.profile_photo_url, e.profile_photo_url) AS profile_photo_url,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
-              d.name AS department_name, des.name AS designation_name, s.site_name
+              d.name AS department_name, des.name AS designation_name, s.site_name,
+              s.client_id, cl.company_name AS client_company_name
        FROM employees e
        LEFT JOIN employee_personal_details pd ON pd.employee_id = e.id
        LEFT JOIN employee_employment_details ed ON ed.employee_id = e.id AND ed.is_current = TRUE
        INNER JOIN departments d ON d.id = COALESCE(ed.department_id, e.department_id)
        INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
+       LEFT JOIN clients cl ON cl.id = s.client_id AND NOT cl.is_deleted
        WHERE NOT e.is_deleted
        ORDER BY e.created_at DESC
        LIMIT $1`,
@@ -1824,8 +1839,12 @@ export class EmployeeRepository {
   async exportEmployees(
     format: 'excel' | 'pdf' = 'excel',
     columns?: string[] | null,
+    filter: Partial<EmployeeFilter> = {},
   ): Promise<Buffer> {
     const selected = resolveEmployeeExportColumns(columns);
+    const conditions = ['NOT e.is_deleted'];
+    const params: unknown[] = [];
+    this.applyListFilters(filter, conditions, params, 1);
     const { rows } = await query<Record<string, unknown>>(
       `SELECT e.employee_code,
               COALESCE(ed.client_soft_code, e.client_soft_code) AS client_soft_code,
@@ -1837,7 +1856,9 @@ export class EmployeeRepository {
               COALESCE(esd.esi_number, e.esi_number) AS esi_number,
               e.aadhaar_number,
               bd.bank_name, bd.account_number, bd.ifsc_code, bd.account_holder_name,
-              d.name AS department, des.name AS designation, s.site_name AS site,
+              d.name AS department, des.name AS designation,
+              cl.company_name AS client,
+              s.site_name AS site,
               COALESCE(ed.joining_date, e.joining_date) AS joining_date,
               COALESCE(ed.basic_salary, e.basic_salary) AS basic_salary,
               COALESCE(ed.gross_salary, e.gross_salary) AS gross_salary
@@ -1847,10 +1868,12 @@ export class EmployeeRepository {
        INNER JOIN departments d ON d.id = COALESCE(ed.department_id, e.department_id)
        INNER JOIN designations des ON des.id = COALESCE(ed.designation_id, e.designation_id)
        LEFT JOIN sites s ON s.id = COALESCE(ed.site_id, e.site_id)
+       LEFT JOIN clients cl ON cl.id = s.client_id AND NOT cl.is_deleted
        LEFT JOIN employee_bank_details bd ON bd.employee_id = e.id
        LEFT JOIN employee_statutory_details esd ON esd.employee_id = e.id AND NOT esd.is_deleted
-       WHERE NOT e.is_deleted
+       WHERE ${conditions.join(' AND ')}
        ORDER BY e.employee_code`,
+      params,
     );
 
     const valueFor = (r: Record<string, unknown>, key: string): string | number | null => {
@@ -1872,6 +1895,7 @@ export class EmployeeRepository {
         case 'status': return r.status == null ? '' : Number(r.status);
         case 'department': return String(r.department ?? '');
         case 'designation': return String(r.designation ?? '');
+        case 'client': return r.client == null ? '' : String(r.client);
         case 'site': return r.site == null ? '' : String(r.site);
         case 'joiningDate': return formatDate(String(r.joining_date));
         case 'basicSalary': return r.basic_salary == null ? '' : Number(r.basic_salary);

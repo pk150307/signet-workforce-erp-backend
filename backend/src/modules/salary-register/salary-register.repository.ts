@@ -9,7 +9,12 @@ import {
 import { formatDateTime, toNumber } from '../../utils/formatters';
 import { buildExcelBuffer } from '../../utils/excel-export';
 import { applyExportColumnSelection } from '../../utils/export-columns';
-import { buildPdfTableBuffer } from '../../utils/pdf-export';
+import {
+  buildPdfTableBuffer,
+  EXPORT_ROWS_PER_PAGE,
+  WIDE_PDF_COLUMN_THRESHOLD,
+  WIDE_PDF_ROWS_PER_PAGE,
+} from '../../utils/pdf-export';
 import { NotFoundError } from '../../common/errors';
 import {
   SalaryRegisterDetail,
@@ -140,17 +145,6 @@ export const SALARY_REGISTER_EXPORT_COLUMNS = [
   { key: 'esiEligible', label: 'ESI Eligible' },
   { key: 'lwfEligible', label: 'LWF Eligible' },
   { key: 'validation', label: 'Validation' },
-] as const;
-
-const SALARY_PDF_OMIT_HEADERS = [
-  'Aadhaar',
-  'A/C No',
-  'UAN',
-  'ESI No',
-  'PF Eligible',
-  'ESI Eligible',
-  'LWF Eligible',
-  'Validation',
 ] as const;
 
 export class SalaryRegisterRepository {
@@ -718,15 +712,15 @@ export class SalaryRegisterRepository {
       SALARY_REGISTER_EXPORT_COLUMNS,
       columns,
       this.buildExportDataRows(detail),
-      SALARY_PDF_OMIT_HEADERS,
     );
+    const wide = selected.headers.length > WIDE_PDF_COLUMN_THRESHOLD;
     return buildPdfTableBuffer({
       title: 'Salary Register',
       subtitle: `${clientPart} · ${period}`,
       headers: selected.headers,
       rows: selected.rows,
-      landscape: true,
-      omitHeaders: selected.omitHeaders,
+      landscape: wide,
+      rowsPerPage: wide ? WIDE_PDF_ROWS_PER_PAGE : EXPORT_ROWS_PER_PAGE,
     });
   }
 

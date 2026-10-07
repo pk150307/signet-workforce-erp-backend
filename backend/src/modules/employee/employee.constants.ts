@@ -116,6 +116,7 @@ export const EMPLOYEE_EXPORT_COLUMN_DEFS = [
   { key: 'status', label: 'Status' },
   { key: 'department', label: 'Department' },
   { key: 'designation', label: 'Designation' },
+  { key: 'client', label: 'Client' },
   { key: 'site', label: 'Site' },
   { key: 'joiningDate', label: 'Joining Date' },
   { key: 'basicSalary', label: 'Basic Salary' },

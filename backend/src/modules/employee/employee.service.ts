@@ -254,8 +254,12 @@ export class EmployeeService {
     return employeeRepository.bulkImport(rows, createdBy);
   }
 
-  exportEmployees(format: 'excel' | 'pdf' = 'excel', columns?: string[] | null) {
-    return employeeRepository.exportEmployees(format, columns);
+  exportEmployees(
+    format: 'excel' | 'pdf' = 'excel',
+    columns?: string[] | null,
+    filter: Partial<EmployeeFilter> = {},
+  ) {
+    return employeeRepository.exportEmployees(format, columns, filter);
   }
 }
 

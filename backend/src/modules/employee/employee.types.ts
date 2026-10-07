@@ -20,6 +20,8 @@ export interface EmployeeListItem {
   department: string;
   designation: string;
   siteName: string | null;
+  clientId: string | null;
+  clientName: string | null;
   status: EmployeeLifecycleStatus;
   joiningDate: string;
   profilePhotoUrl: string | null;
