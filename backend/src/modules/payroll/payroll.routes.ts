@@ -123,8 +123,8 @@ router.post(
         const basicSalary = toNumber(employee.basic_salary);
         const grossSalary = toNumber(employee.gross_salary);
         const presentDays = presentByEmployee.get(employee.id) ?? 0;
-        const leaveDays = leaveByEmployee.get(employee.id) ?? 0;
-        const absentDays = Math.max(0, workingDays - presentDays - leaveDays);
+        const leaveDays = round2(leaveByEmployee.get(employee.id) ?? 0);
+        const absentDays = round2(Math.max(0, workingDays - presentDays - leaveDays));
         const overtimeHours = otByEmployee.get(employee.id) ?? 0;
 
         const perDaySalary = basicSalary / workingDays;

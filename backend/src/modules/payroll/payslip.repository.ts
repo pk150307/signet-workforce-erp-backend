@@ -12,6 +12,7 @@ import {
   PayslipPrintData,
 } from './payslip.types';
 import { monthName, toNumber, formatDate, daysInMonth, formatPersonName } from '../../utils/formatters';
+import { logger } from '../../utils/logger';
 import { NotFoundError } from '../../common/errors';
 import { companyRepository } from '../company/company.repository';
 import { CompanyProfile } from '../company/company.types';
@@ -76,7 +77,24 @@ export class PayslipRepository {
       throw new NotFoundError('Payroll entries for period');
     }
 
-    const slipRows = entries.map((entry) => {
+    const seenEmployees = new Set<string>();
+    const uniqueEntries = entries.filter((entry) => {
+      const employeeId = String(entry.employee_id);
+      if (seenEmployees.has(employeeId)) return false;
+      seenEmployees.add(employeeId);
+      return true;
+    });
+    if (uniqueEntries.length !== entries.length) {
+      logger.warn('Dropped duplicate payroll rows while generating payslips', {
+        month: input.month,
+        year: input.year,
+        clientId: input.clientId,
+        returned: entries.length,
+        unique: uniqueEntries.length,
+      });
+    }
+
+    const slipRows = uniqueEntries.map((entry) => {
       const breakdown = buildPayslipBreakdownFromPayrollRow(entry);
       const attendanceSummary = resolvePayslipAttendanceSummary({
         ...entry,

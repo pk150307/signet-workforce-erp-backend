@@ -1,7 +1,8 @@
 import { query } from '../../database/pool';
 import { AppError } from '../../common/errors';
 import { AttendanceStatus, EmployeeStatus, LeaveStatus, PayrollStatus } from '../../types/enums';
-import { daysInMonth, roundOff, toNumber } from '../../utils/formatters';
+import { daysInMonth, round2, roundOff, toNumber } from '../../utils/formatters';
+import { logger } from '../../utils/logger';
 import {
   proRateGradeCompensation,
 } from '../designation-grade/designation-grade.compensation';
@@ -80,11 +81,28 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
     throw new AppError(404, 'No active employees found for the selected filters.');
   }
 
+  const seenEmployeeIds = new Set<string>();
+  const uniqueEmployees = employees.filter((employee) => {
+    const employeeId = String(employee.id);
+    if (seenEmployeeIds.has(employeeId)) return false;
+    seenEmployeeIds.add(employeeId);
+    return true;
+  });
+  if (uniqueEmployees.length !== employees.length) {
+    logger.warn('Dropped duplicate employees while processing payroll', {
+      month,
+      year,
+      clientId: options.clientId,
+      returned: employees.length,
+      unique: uniqueEmployees.length,
+    });
+  }
+
   const calendarDays = daysInMonth(year, month);
   const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
   const monthEndDate = new Date(year, month, 0);
   const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(monthEndDate.getDate()).padStart(2, '0')}`;
-  const employeeIds = employees.map((employee) => String(employee.id));
+  const employeeIds = uniqueEmployees.map((employee) => String(employee.id));
 
   const [leaveResult, registerExtrasResult] = await Promise.all([
     query<{ employee_id: string; sum: string | null }>(
@@ -162,21 +180,22 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
   let totalDeductions = 0;
   const payrollRows: unknown[][] = [];
 
-  for (const employee of employees) {
+  for (const employee of uniqueEmployees) {
     const employeeId = String(employee.id);
     const payGrade = resolvePayGradeFromRow(employee);
     const gradeComp = payGrade.gradeComp;
     const basicSalary = gradeComp?.basicSalary ?? toNumber(employee.employment_basic_salary as string);
     const grossSalary = payGrade.monthlyGross;
     const extras = extrasByEmployee.get(employeeId);
-    const leaveDays = leaveByEmployee.get(employeeId) ?? 0;
+    const leaveDays = round2(leaveByEmployee.get(employeeId) ?? 0);
 
     let presentDays = parseFloat(extras?.present_days ?? '');
     if (!Number.isFinite(presentDays)) {
       presentDays = presentFallbackByEmployee.get(employeeId) ?? 0;
     }
+    presentDays = round2(presentDays);
 
-    const absentDays = Math.max(0, calendarDays - presentDays - leaveDays);
+    const absentDays = round2(Math.max(0, calendarDays - presentDays - leaveDays));
     const overtimePay = roundOff(parseFloat(extras?.overtime_amount ?? '0'));
     const nightAllowance = roundOff(parseFloat(extras?.night_allowance ?? '0'));
     const punctualityAward = roundOff(parseFloat(extras?.punctuality_award ?? '0'));
@@ -307,7 +326,7 @@ export async function processPayrollForPeriod(options: ProcessPayrollOptions): P
     [
       payrollRunId,
       PayrollStatus.Processed,
-      employees.length,
+      uniqueEmployees.length,
       roundOff(totalGross),
       roundOff(totalDeductions),
       roundOff(totalGross - totalDeductions),
