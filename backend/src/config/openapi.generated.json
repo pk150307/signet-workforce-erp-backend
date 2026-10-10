@@ -323,6 +323,106 @@
     }
   ],
   "paths": {
+    "/api/document-formatter/attendance/preview": {
+      "post": {
+        "tags": [
+          "Document Formatter"
+        ],
+        "summary": "Match a raw attendance register to employees and preview the attendance template",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Matched and unmatched attendance rows"
+          }
+        }
+      }
+    },
+    "/api/document-formatter/attendance/export": {
+      "post": {
+        "tags": [
+          "Document Formatter"
+        ],
+        "summary": "Download the raw register converted to the attendance import template",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "clientId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Attendance workbook"
+          }
+        }
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [

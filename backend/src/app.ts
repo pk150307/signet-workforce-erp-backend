@@ -41,6 +41,7 @@ import deleteRequestsRoutes from './modules/delete-requests/delete-requests.rout
 import auditLogsRoutes from './modules/audit-logs/audit-logs.routes';
 import salaryRegisterRoutes from './modules/salary-register/salary-register.routes';
 import employeeAdvancesRoutes from './modules/employee-advances/employee-advances.routes';
+import documentFormatterRoutes from './modules/document-formatter/document-formatter.routes';
 
 export function createApp(): express.Application {
   const app = express();
@@ -140,6 +141,7 @@ export function createApp(): express.Application {
   app.use('/api/audit-logs', auditLogsRoutes);
   app.use('/api/salary-register', salaryRegisterRoutes);
   app.use('/api/employee-advances', employeeAdvancesRoutes);
+  app.use('/api/document-formatter', documentFormatterRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
