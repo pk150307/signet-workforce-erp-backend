@@ -3,30 +3,52 @@ import { computeGradeGross } from './designation-grade.types';
 import { GradeCompensation, gradeCompensationFromRow } from './designation-grade.compensation';
 import { StatutorySourceRow } from '../statutory/statutory.calculation';
 
-/** SQL fragment: resolves pay grade for employee designation (handles mismatched grade assignment). */
+/**
+ * SQL fragment: one pay grade per employee.
+ * A plain join can match several grades (same code, or several grades at the
+ * minimum level). Payslip generation then inserts that employee twice and
+ * Postgres rejects the statement.
+ */
 export const EMPLOYEE_PAY_GRADE_JOINS = `
-  LEFT JOIN designation_grades assigned_dg
-    ON assigned_dg.id = COALESCE(ed.designation_grade_id, e.designation_grade_id)
-   AND NOT assigned_dg.is_deleted
-  LEFT JOIN designation_grades dg ON NOT dg.is_deleted
-   AND dg.designation_id = COALESCE(ed.designation_id, e.designation_id)
-   AND (
-     (assigned_dg.id IS NOT NULL
-      AND assigned_dg.designation_id = COALESCE(ed.designation_id, e.designation_id)
-      AND dg.id = assigned_dg.id)
-     OR (assigned_dg.id IS NOT NULL
+  LEFT JOIN LATERAL (
+    SELECT g.*
+    FROM designation_grades g
+    LEFT JOIN designation_grades assigned_dg
+      ON assigned_dg.id = COALESCE(ed.designation_grade_id, e.designation_grade_id)
+     AND NOT assigned_dg.is_deleted
+    WHERE NOT g.is_deleted
+      AND g.designation_id = COALESCE(ed.designation_id, e.designation_id)
+      AND (
+        (assigned_dg.id IS NOT NULL
+         AND assigned_dg.designation_id = COALESCE(ed.designation_id, e.designation_id)
+         AND g.id = assigned_dg.id)
+        OR (assigned_dg.id IS NOT NULL
+            AND assigned_dg.designation_id IS DISTINCT FROM COALESCE(ed.designation_id, e.designation_id)
+            AND g.code = assigned_dg.code)
+        OR (assigned_dg.id IS NULL
+            AND g.is_active = TRUE
+            AND g.level = (
+              SELECT MIN(g2.level)
+              FROM designation_grades g2
+              WHERE g2.designation_id = COALESCE(ed.designation_id, e.designation_id)
+                AND NOT g2.is_deleted
+                AND g2.is_active
+            ))
+      )
+    ORDER BY
+      CASE
+        WHEN assigned_dg.id IS NOT NULL
+         AND assigned_dg.designation_id = COALESCE(ed.designation_id, e.designation_id)
+         AND g.id = assigned_dg.id THEN 0
+        WHEN assigned_dg.id IS NOT NULL
          AND assigned_dg.designation_id IS DISTINCT FROM COALESCE(ed.designation_id, e.designation_id)
-         AND dg.code = assigned_dg.code)
-     OR (assigned_dg.id IS NULL
-         AND dg.is_active = TRUE
-         AND dg.level = (
-           SELECT MIN(g2.level)
-           FROM designation_grades g2
-           WHERE g2.designation_id = COALESCE(ed.designation_id, e.designation_id)
-             AND NOT g2.is_deleted
-             AND g2.is_active
-         ))
-   )`;
+         AND g.code = assigned_dg.code THEN 1
+        ELSE 2
+      END,
+      g.level,
+      g.id
+    LIMIT 1
+  ) dg ON TRUE`;
 
 export const EMPLOYEE_PAY_GRADE_SELECT = `
   COALESCE(ed.designation_id, e.designation_id) AS employee_designation_id,
