@@ -25,6 +25,15 @@ export function errorHandler(
     path: req.path,
     method: req.method,
     traceId: req.traceId,
+    ...(err instanceof DatabaseError
+      ? {
+          code: err.code,
+          detail: err.detail,
+          constraint: err.constraint,
+          table: err.table,
+          column: err.column,
+        }
+      : {}),
   });
 
   let response: ErrorResponse;
